@@ -3,7 +3,6 @@ This simulator was created as a simplified alternative to the [AirSim](https://g
 
 Only the parts related to horizontal movements, which the author uses in lectures, have been adjusted. Please do not expect too much.
 
-LICENSE
 ### LICENSE
 
 This project is licensed under MIT License

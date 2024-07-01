@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone Playground</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        #editorContainer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40vw;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        #editorContainer textarea{
+            outline: 0
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-weight: bold;
+            font-family: Consolas;
+            color:white;
+        }
+        button {
+            padding: 5px 5px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: rgba(0,255,255,0.7);
+            border: solid 2px rgba(0,255,255,0.7);
+            cursor: pointer;
+            font-weight:bold;
+            font-family:Consolas;
+        }
+        button:hover {
+            background-color: rgba(0,255,255,0.7);
+            color: rgba(0, 0, 0, 0.6);
+        }
+        button:active {
+            border : solid 2px rgba(255, 255, 255, 0.8);
+            background-color: rgba(255, 255, 255, 0.8);
+            color: rgba(0,0,0,0.7);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="editorContainer"></div>
+    <div id="ui">
+        <button id="toggle">Hide Code</button>
+        <button id="run">Run</button>
+        <button id="pause">Pause</button>
+        <button id="reset">Reset time</button>
+        <button id="despawnAll">Despawn All</button>
+        <span id="fps"></span>,
+        <span id="time"></span>,
+        <span id="droneCount"></span>
+    </div>
+</body>
+</html>

@@ -137,12 +137,14 @@ class DroneSimulator {
     public pause(): void {
         this.isSimulationRunning = false;
         this.toggleSimulationButton.textContent = 'Resume';
+        this.toggleSimulationButton.classList.add('warning');
         console.log('Simulation paused');
     }
 
     public resume(): void {
         this.isSimulationRunning = true;
         this.toggleSimulationButton.textContent = 'Pause';
+        this.toggleSimulationButton.classList.remove('warning');
         console.log('Simulation resumed');
     }
 

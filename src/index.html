@@ -44,7 +44,7 @@
             top: 10px;
             left: 10px;
             font-weight: bold;
-            font-family: Consolas;
+            font-family: Consolas, Helvetica, sans-serif;
             color:white;
         }
         button {
@@ -54,7 +54,7 @@
             border: solid 2px rgba(0,255,255,0.7);
             cursor: pointer;
             font-weight:bold;
-            font-family:Consolas;
+            font-family:Consolas, Helvetica, sans-serif;
         }
         button:hover {
             background-color: rgba(0,255,255,0.7);
@@ -76,6 +76,9 @@
             background-color: rgba(255, 128, 0, 0.9);
             color: rgba(0, 0, 0, 0.7);
         }
+        #indicators {
+            margin-top:0.5em;
+        }
     </style>
 </head>
 <body>
@@ -87,9 +90,13 @@
         <button id="pause">Pause</button>
         <button id="reset">Reset time</button>
         <button id="despawnAll">Despawn All</button>
-        <span id="fps"></span>,
-        <span id="time"></span>,
-        <span id="droneCount"></span>
+        <div id="indicators">
+            <span id="fps"></span>,
+            <span id="time"></span>,
+            <span id="droneCount"></span> <br>
+            <span id="cameraPosition"></span>
+            <span id="cameraRotation"></span>  
+        </div>
     </div>
 </body>
 </html>

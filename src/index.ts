@@ -13,6 +13,7 @@ interface Drone {
     dynamicSystem: DynamicSystem;
     state: DroneState;
     label: GUI.Rectangle;
+    rotorAnimation?: BABYLON.AnimationGroup;
 }
 
 interface DroneState {
@@ -56,6 +57,8 @@ class DroneSimulator {
     private fpsIndicator!: HTMLElement;
     private timeIndicator!: HTMLElement;
     private droneCountIndicator!: HTMLElement;
+    private cameraPositionIndicator!: HTMLElement;
+    private cameraRotationIndicator!: HTMLElement;
     private cameraSpeed: number = 0.25;
     private trackScale: number = 200;
     private codeChanged: boolean = false;
@@ -82,6 +85,8 @@ class DroneSimulator {
         this.fpsIndicator = document.getElementById('fps') as HTMLElement;
         this.timeIndicator = document.getElementById('time') as HTMLElement;
         this.droneCountIndicator = document.getElementById('droneCount') as HTMLElement;
+        this.cameraPositionIndicator = document.getElementById('cameraPosition') as HTMLElement;
+        this.cameraRotationIndicator = document.getElementById('cameraRotation') as HTMLElement;
     }
 
     private setupCameraKeyboardControl(): void {
@@ -140,14 +145,26 @@ class DroneSimulator {
         this.toggleSimulationButton.textContent = 'Resume';
         this.toggleSimulationButton.classList.add('warning');
         console.log('Simulation paused');
+        
+        // Stop rotor animations
+        this.drones.forEach((drone) => {
+            drone.rotorAnimation?.stop();
+        });
     }
+    
 
     public resume(): void {
         this.isSimulationRunning = true;
         this.toggleSimulationButton.textContent = 'Pause';
         this.toggleSimulationButton.classList.remove('warning');
         console.log('Simulation resumed');
+        
+        // Resume rotor animations
+        this.drones.forEach((drone) => {
+            drone.rotorAnimation?.start(true, 1.0, drone.rotorAnimation.from, drone.rotorAnimation.to, false);
+        });
     }
+    
 
     public despawnAll(): void {
         this.drones.forEach((drone, name) => {
@@ -446,8 +463,12 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             const droneMesh = this.droneTemplate.clone(`drone_${droneName}`);
             droneMesh.setEnabled(true);
             this.shadowGenerator.addShadowCaster(droneMesh);
+            
             const rotorAnimation = this.createRotorAnimation(droneName);
-            rotorAnimation.start(true, 1.0);
+
+            if(this.isSimulationRunning){
+                rotorAnimation.start(true, 1.0);
+            }
 
             let state: DroneState = {
                 position: initialState?.position || new BABYLON.Vector3(0, 0, 0),
@@ -463,7 +484,8 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
                 controller: controller,
                 dynamicSystem: dynamicSystem,
                 state: state,
-                label: label
+                label: label,
+                rotorAnimation: rotorAnimation
             };
 
             drone.mesh.position = drone.state.position;
@@ -725,6 +747,11 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             }
             this.timeIndicator.innerText = `Time: ${this.t.toFixed(2)} s`;
             this.droneCountIndicator.innerText = `# of Drones: ${this.drones.size}`;
+
+            const cameraPosition = this.camera.position;
+            this.cameraPositionIndicator.innerText = `x: ${cameraPosition.x.toFixed(2)}, y: ${cameraPosition.y.toFixed(2)}, z: ${cameraPosition.z.toFixed(2)}`;
+            const cameraRotation = this.camera.rotation;
+            this.cameraRotationIndicator.innerText = `x: ${cameraRotation.x.toFixed(2)}, y: ${cameraRotation.y.toFixed(2)}, z: ${cameraRotation.z.toFixed(2)}`;
         });
 
         window.addEventListener('resize', () => {

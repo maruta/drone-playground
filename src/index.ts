@@ -5,7 +5,7 @@ import * as monaco from 'monaco-editor';
 import { DynamicSystem, vectorAdd, vectorScale } from './dynamicSystem';
 import * as GUI from 'babylonjs-gui';
 import { create } from 'domain';
-
+import { compressUrlSafe, decompressUrlSafe } from './vendor/lzma-url.mjs'
 
 interface Drone {
     mesh: BABYLON.Mesh;
@@ -58,6 +58,7 @@ class DroneSimulator {
     private droneCountIndicator!: HTMLElement;
     private cameraSpeed: number = 0.25;
     private trackScale: number = 200;
+    private codeChanged: boolean = false;
     
     constructor(canvas: HTMLCanvasElement, editorContainer: HTMLElement) {
         this.canvas = canvas;
@@ -237,20 +238,32 @@ class DroneSimulator {
         
     }
 
+
     private loadCodeFromHash(): void {
         const hash = window.location.hash.substring(1);
         if (hash) {
-            const code = decodeURIComponent(hash);
-            this.editor.setValue(code);
-            console.log('Code loaded from URL hash');
+            const compressedCode = atob(hash);
+            const code = decompressUrlSafe(compressedCode);
+            if (code) {
+                this.editor.setValue(code);
+                console.log('Code loaded from URL hash');
+            } else {
+                console.error('Failed to decompress code from URL hash');
+            }
         }
     }
 
     private updateHashFromCode(): void {
+        if (!this.codeChanged) return; // 変更がない場合は更新しない
+    
         const code = this.editor.getValue();
-        const hash = encodeURIComponent(code);
+        const compressedCode = compressUrlSafe(code);
+        const hash = btoa(compressedCode);
         window.location.hash = hash;
+    
+        this.codeChanged = false; // 更新後にフラグをリセット
     }
+    
 
     private setupCodeEditor(): void {
         monaco.editor.defineTheme('myTheme', {
@@ -320,6 +333,10 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             minimap: { enabled: false },
         });
 
+        this.editor.onDidChangeModelContent(() => {
+            this.codeChanged = true;
+        });
+
         this.toggleButton = document.getElementById('toggle') as HTMLButtonElement;
         this.runButton = document.getElementById('run') as HTMLButtonElement;
 
@@ -327,7 +344,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
         this.toggleButton.addEventListener('click', () => this.toggleEditorVisibility());
         
         this.loadCodeFromHash();
-        setInterval(() => this.updateHashFromCode(), 10000);
+        setInterval(() => this.updateHashFromCode(), 1000);
 
     }
 

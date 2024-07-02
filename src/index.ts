@@ -53,7 +53,7 @@ class DroneSimulator {
     private toggleSimulationButton!: HTMLButtonElement;
     private resetTimeButton!: HTMLButtonElement;
     private despawnAllButton!: HTMLButtonElement;
-    private shadowGenerator!: BABYLON.ShadowGenerator;    
+    private shadowGenerator!: BABYLON.ShadowGenerator;
     private fpsIndicator!: HTMLElement;
     private timeIndicator!: HTMLElement;
     private droneCountIndicator!: HTMLElement;
@@ -62,7 +62,7 @@ class DroneSimulator {
     private cameraSpeed: number = 0.25;
     private trackScale: number = 200;
     private codeChanged: boolean = false;
-    
+
     constructor(canvas: HTMLCanvasElement, editorContainer: HTMLElement) {
         this.canvas = canvas;
         this.editorContainer = editorContainer;
@@ -127,10 +127,36 @@ class DroneSimulator {
         return BABYLON.Vector3.Cross(forward, BABYLON.Vector3.Up());
     }
 
+    private setupCameraMouseWheelControl(): void {
+        this.canvas.addEventListener('wheel', (event) => {
+            const zoomFactor = 10;
+            const panFactor = this.cameraSpeed * 5;
+
+            if (event.deltaY < 0) {
+                // Zoom in
+                this.camera.position.addInPlace(this.camera.getForwardRay().direction.scale(this.cameraSpeed * zoomFactor));
+            } else if (event.deltaY > 0) {
+                // Zoom out
+                this.camera.position.subtractInPlace(this.camera.getForwardRay().direction.scale(this.cameraSpeed * zoomFactor));
+            }
+
+            if (event.deltaX < 0) {
+                // Scroll left
+                this.camera.position.addInPlace(this.getRightDirection().scale(panFactor));
+            } else if (event.deltaX > 0) {
+                // Scroll right
+                this.camera.position.subtractInPlace(this.getRightDirection().scale(panFactor));
+            }
+
+            event.preventDefault();
+        });
+    }
+
+
     private toggleSimulation(): void {
-        if(this.isSimulationRunning){
+        if (this.isSimulationRunning) {
             this.pause();
-        }else{
+        } else {
             this.resume();
         }
     }
@@ -145,26 +171,24 @@ class DroneSimulator {
         this.toggleSimulationButton.textContent = 'Resume';
         this.toggleSimulationButton.classList.add('warning');
         console.log('Simulation paused');
-        
+
         // Stop rotor animations
         this.drones.forEach((drone) => {
             drone.rotorAnimation?.stop();
         });
     }
-    
 
     public resume(): void {
         this.isSimulationRunning = true;
         this.toggleSimulationButton.textContent = 'Pause';
         this.toggleSimulationButton.classList.remove('warning');
         console.log('Simulation resumed');
-        
+
         // Resume rotor animations
         this.drones.forEach((drone) => {
             drone.rotorAnimation?.start(true, 1.0, drone.rotorAnimation.from, drone.rotorAnimation.to, false);
         });
     }
-    
 
     public despawnAll(): void {
         this.drones.forEach((drone, name) => {
@@ -172,6 +196,7 @@ class DroneSimulator {
         });
         console.log('All drones despawned');
     }
+
     private setupScene(): void {
         this.camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 3, -8), this.scene);
         this.camera.attachControl(this.canvas, true);
@@ -182,7 +207,7 @@ class DroneSimulator {
         light.shadowEnabled = true;
         new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.scene);
 
-        
+
         const gridMaterial = new GridMaterial("gridMaterial", this.scene);
         gridMaterial.majorUnitFrequency = 5;
         gridMaterial.minorUnitVisibility = 0.45;
@@ -197,10 +222,10 @@ class DroneSimulator {
 
         const shadowGround = BABYLON.MeshBuilder.CreateGround("shadowGround", { width: 200, height: 200 }, this.scene);
         const shadowMaterial = new ShadowOnlyMaterial("shadowOnly", this.scene);
-        shadowMaterial.alpha = 0.9;  
+        shadowMaterial.alpha = 0.9;
         shadowGround.material = shadowMaterial;
         shadowGround.receiveShadows = true;
-        shadowGround.position.y = 0.00; 
+        shadowGround.position.y = 0.00;
 
         this.shadowGenerator = new BABYLON.ShadowGenerator(1024, light);
         this.shadowGenerator.useBlurExponentialShadowMap = true;
@@ -208,14 +233,15 @@ class DroneSimulator {
 
         this.createOvalTrack();
 
-//        new BABYLON.AxesViewer(this.scene, 3);
+        //        new BABYLON.AxesViewer(this.scene, 3);
         this.setupCameraKeyboardControl();
+        this.setupCameraMouseWheelControl();
         console.log("Scene setup completed");
     }
 
     private createOvalTrack(): void {
-        const radius = this.trackScale*0.25/Math.PI;
-        const straightLength = this.trackScale*0.25;
+        const radius = this.trackScale * 0.25 / Math.PI;
+        const straightLength = this.trackScale * 0.25;
         const trackHeight = 0;
         const numPoints = 100;
         const mainColor = new BABYLON.Color3(1, 1, 0);
@@ -246,15 +272,22 @@ class DroneSimulator {
         trackLine.color = mainColor;
 
         const originPoints = new Array<BABYLON.Vector3>();
-        originPoints.push(new BABYLON.Vector3(-radius, trackHeight, straightLength / 2-this.trackScale*0.05));
-        originPoints.push(new BABYLON.Vector3(-radius, trackHeight+3, straightLength / 2-this.trackScale*0.05));
+        originPoints.push(new BABYLON.Vector3(-radius, trackHeight, straightLength / 2 - this.trackScale * 0.05));
+        originPoints.push(new BABYLON.Vector3(-radius, trackHeight + 3, straightLength / 2 - this.trackScale * 0.05));
         const originLine = BABYLON.MeshBuilder.CreateLines("originLine", {
             points: originPoints
         }, this.scene);
         originLine.color = new BABYLON.Color3(1, 1, 0);
-        
+
     }
 
+    public setCameraPosition(x: number, y: number, z: number): void {
+        this.camera.position = new BABYLON.Vector3(x, y, z);
+    }
+
+    public setCameraRotation(x: number, y: number, z: number): void {
+        this.camera.rotation = new BABYLON.Vector3(x, y, z);
+    }
 
     private loadCodeFromHash(): void {
         const hash = window.location.hash.substring(1);
@@ -272,15 +305,14 @@ class DroneSimulator {
 
     private updateHashFromCode(): void {
         if (!this.codeChanged) return; // 変更がない場合は更新しない
-    
+
         const code = this.editor.getValue();
         const compressedCode = compressUrlSafe(code);
         const hash = btoa(compressedCode);
         window.location.hash = hash;
-    
+
         this.codeChanged = false; // 更新後にフラグをリセット
     }
-    
 
     private setupCodeEditor(): void {
         monaco.editor.defineTheme('myTheme', {
@@ -359,7 +391,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
 
         this.runButton.addEventListener('click', () => this.runCode());
         this.toggleButton.addEventListener('click', () => this.toggleEditorVisibility());
-        
+
         this.loadCodeFromHash();
         setInterval(() => this.updateHashFromCode(), 1000);
 
@@ -375,6 +407,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             this.toggleButton.textContent = 'Show Code';
         }
     }
+
     private runCode(): void {
         const code = this.editor.getValue();
         try {
@@ -437,7 +470,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
                 });
                 keys.push({
                     frame: 7,
-                    value: new BABYLON.Vector3(0,0, 2 * Math.PI)
+                    value: new BABYLON.Vector3(0, 0, 2 * Math.PI)
                 });
                 animation.setKeys(keys);
                 rotorAnimation.addTargetedAnimation(animation, rotor);
@@ -463,10 +496,10 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             const droneMesh = this.droneTemplate.clone(`drone_${droneName}`);
             droneMesh.setEnabled(true);
             this.shadowGenerator.addShadowCaster(droneMesh);
-            
+
             const rotorAnimation = this.createRotorAnimation(droneName);
 
-            if(this.isSimulationRunning){
+            if (this.isSimulationRunning) {
                 rotorAnimation.start(true, 1.0);
             }
 
@@ -517,7 +550,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
         const maxLineWidth = text.text.split('\n').reduce((max, line) => Math.max(max, this.advancedTexture.getContext().measureText(line).width), 0);
         const estimatedWidth = maxLineWidth;
         const estimatedHeight = nlines * 28;
-        label.width = `${estimatedWidth*1.5}px`;
+        label.width = `${estimatedWidth * 1.5}px`;
         label.height = `${estimatedHeight}px`;
         label.addControl(text);
 
@@ -543,7 +576,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
     }
 
     private buildDroneDynamicSystem(initialState: DroneState): DynamicSystem {
-        const g = 9.81; 
+        const g = 9.81;
         const m = 1; // for simplicity, not the actual mass of the drone
         const Ixx = 1.5; // for imitating AirSim 
         const Iyy = 2.0; // randomly chosen
@@ -598,7 +631,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
         const Kp = [1, 4, 1];
         const Ki = [0, 0, 0];
         const Kd = [1.5 / 0.206, 0.1, 1.5 / 0.206];
-        const T = 0.005; 
+        const T = 0.005;
 
         // internal PID controllers
         const A_pid = [
@@ -720,19 +753,19 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             const currentTime = Date.now();
             let dt = (currentTime - lastTime) / 1000;
 
-            if (dt > 1/15) {
+            if (dt > 1 / 15) {
                 // if the frame rate is too low, slow down the simulation
-                dt = 1/15;
+                dt = 1 / 15;
             }
 
             lastTime = currentTime;
             if (this.isSimulationRunning) {
                 // user control loop should run at least 60Hz
-                let nstep = Math.ceil(dt / (1/60));
+                let nstep = Math.ceil(dt / (1 / 60));
                 for (let i = 0; i < nstep; i++) {
                     this.t += dt / nstep;
                     this.drones.forEach((drone, name) => {
-                        this.updateDroneState(drone, dt/nstep, this.t);
+                        this.updateDroneState(drone, dt / nstep, this.t);
                     });
                 }
             }

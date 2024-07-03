@@ -209,6 +209,7 @@ class DroneSimulator {
         //        new BABYLON.AxesViewer(this.scene, 3);
         this.setupCameraKeyboardControl();
         this.camera.inputs.addMouseWheel();
+
         (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
         (this.camera.inputs.attached as any).touch.touchAngularSensibility = 5000;
 
@@ -379,7 +380,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             this.editorContainer.style.transform = 'translateX(0)';
             this.toggleButton.textContent = 'Hide Code';
         } else {
-            this.editorContainer.style.transform = 'translateX(100%)';
+            this.editorContainer.style.transform = 'translateX(-100%)';
             this.toggleButton.textContent = 'Show Code';
         }
     }

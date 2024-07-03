@@ -4,7 +4,6 @@ import { GridMaterial, ShadowOnlyMaterial } from 'babylonjs-materials';
 import * as monaco from 'monaco-editor';
 import { DynamicSystem, vectorAdd, vectorScale } from './dynamicSystem';
 import * as GUI from 'babylonjs-gui';
-import { create } from 'domain';
 import { compressUrlSafe, decompressUrlSafe } from './vendor/lzma-url.mjs'
 
 interface Drone {
@@ -126,33 +125,7 @@ class DroneSimulator {
         const forward = this.getForwardDirection();
         return BABYLON.Vector3.Cross(forward, BABYLON.Vector3.Up());
     }
-
-    private setupCameraMouseWheelControl(): void {
-        this.canvas.addEventListener('wheel', (event) => {
-            const zoomFactor = 10;
-            const panFactor = this.cameraSpeed * 5;
-
-            if (event.deltaY < 0) {
-                // Zoom in
-                this.camera.position.addInPlace(this.camera.getForwardRay().direction.scale(this.cameraSpeed * zoomFactor));
-            } else if (event.deltaY > 0) {
-                // Zoom out
-                this.camera.position.subtractInPlace(this.camera.getForwardRay().direction.scale(this.cameraSpeed * zoomFactor));
-            }
-
-            if (event.deltaX < 0) {
-                // Scroll left
-                this.camera.position.addInPlace(this.getRightDirection().scale(panFactor));
-            } else if (event.deltaX > 0) {
-                // Scroll right
-                this.camera.position.subtractInPlace(this.getRightDirection().scale(panFactor));
-            }
-
-            event.preventDefault();
-        });
-    }
-
-
+    
     private toggleSimulation(): void {
         if (this.isSimulationRunning) {
             this.pause();
@@ -235,7 +208,10 @@ class DroneSimulator {
 
         //        new BABYLON.AxesViewer(this.scene, 3);
         this.setupCameraKeyboardControl();
-        this.setupCameraMouseWheelControl();
+        this.camera.inputs.addMouseWheel();
+        (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
+        (this.camera.inputs.attached as any).touch.touchAngularSensibility = 5000;
+
         console.log("Scene setup completed");
     }
 

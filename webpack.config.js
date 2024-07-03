@@ -32,6 +32,7 @@ module.exports = {
     devtoolModuleFilenameTemplate: 'file:///[absolute-resource-path]'    
   },
   plugins: [
+    new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({
       template: './src/index.html',
     }),
@@ -43,7 +44,6 @@ module.exports = {
           { from: 'static' }
       ]
     }),
-    new CleanWebpackPlugin() 
   ],
   devServer: {
     static: {

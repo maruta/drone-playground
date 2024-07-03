@@ -660,7 +660,8 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
                 const inverseRotationQuaternion = quaternion.conjugate();
                 inverseRotationQuaternion.toRotationMatrix(invRotationMatrix);
                 const upFromLocal = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Up(), invRotationMatrix);
-                return new Float64Array([0, -Math.asin(upFromLocal.z), u[4], Math.asin(upFromLocal.x)]);
+
+                return new Float64Array([0, -Math.atan2(upFromLocal.z,upFromLocal.y), u[4], Math.atan2(upFromLocal.x,upFromLocal.y)]);
             },
             true, new Float64Array([]));
 
@@ -696,6 +697,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
         drone.state.position = new BABYLON.Vector3(newState[0], newState[1], newState[2]);
         drone.state.velocity = new BABYLON.Vector3(newState[3], newState[4], newState[5]);
         drone.state.rotationQuaternion = new BABYLON.Quaternion(newState[6], newState[7], newState[8], newState[9]);
+        drone.state.rotationQuaternion.normalize();
         drone.state.angularVelocity = new BABYLON.Vector3(newState[10], newState[11], newState[12]);
 
         drone.mesh.position = drone.state.position;

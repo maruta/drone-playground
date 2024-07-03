@@ -212,6 +212,8 @@ class DroneSimulator {
 
         (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
         (this.camera.inputs.attached as any).touch.touchAngularSensibility = 5000;
+        (this.camera.inputs.attached as any).mousewheel.wheelPrecisionX = 0.2;
+        (this.camera.inputs.attached as any).mousewheel.wheelPrecisionY = 0.2;
 
         console.log("Scene setup completed");
     }

@@ -42,3 +42,62 @@ Press [Run] and [Resume] to start.
 ### Acknowledgements
 * The 3D model of drone (static/model/drone.glb) was provided by user 31415926 on [sketchfab](https://sketchfab.com/models/055841df0fb24cd4abde06a91f7d360a). It is licensed under the [CC BY 4.0 License](https://creativecommons.org/licenses/by/4.0/).
 
+## Local Development and Building
+
+Follow these steps to develop and build the project on your local environment.
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) installed (npm comes with it)
+- [Visual Studio Code](https://code.visualstudio.com/) (recommended editor)
+
+### Setup
+
+1. Clone or download this repository.
+
+2. Open a terminal in the project's root directory.
+
+3. Run the following command to install the necessary dependencies:
+
+   ```
+   npm install
+   ```
+
+### Starting the Development Server
+
+To run the project during development:
+
+1. Execute the following command:
+
+   ```
+   npm start
+   ```
+
+2. Open `http://localhost:9000` in your browser.
+
+### Building the Project
+
+To build the project for production:
+
+1. Run the following command:
+
+   ```
+   npm run build
+   ```
+
+2. The built files will be output to the `dist` directory.
+
+## Developing with Visual Studio Code
+
+If you're using Visual Studio Code for development:
+
+1. Open the project's root directory in Visual Studio Code.
+
+2. To start debugging:
+   - Press `F5` or select the Debug view (bug icon) from the activity bar on the left.
+   - Choose "Launch Chrome against localhost" from the dropdown menu.
+   - Click the green play button or press `F5` to start debugging.
+
+This project already includes a `.vscode/launch.json` file, so you can start debugging without additional configuration.
+
+Using Visual Studio Code makes it easier to develop and debug TypeScript, allowing you to set breakpoints, watch variables, step through code, and more.

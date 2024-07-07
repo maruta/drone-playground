@@ -94,6 +94,7 @@ If you're using Visual Studio Code for development:
 1. Open the project's root directory in Visual Studio Code.
 
 2. To start debugging:
+   - start the development server with `npm start`. 
    - Press `F5` or select the Debug view (bug icon) from the activity bar on the left.
    - Choose "Launch Chrome against localhost" from the dropdown menu.
    - Click the green play button or press `F5` to start debugging.

@@ -71,6 +71,8 @@ class DroneSimulator {
         this.setupScene();
         this.setupCodeEditor();
         this.setupGUI();
+        this.toggleEditorVisibility();
+        this.runCode();
     }
 
     private setupGUI(): void {

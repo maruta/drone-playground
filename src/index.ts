@@ -23,7 +23,7 @@ interface DroneState {
 }
 
 interface ControlInput {
-    angularRates: BABYLON.Vector3;
+    rollYawRatePitch: BABYLON.Vector3;
     throttle: number;
 }
 
@@ -346,7 +346,7 @@ class DroneSimulator {
         let uz = Kp * (rz - pz) + Kd * (drz - dz);
 
         return {
-            angularRates: new BABYLON.Vector3(uz, uyaw, -ux),
+            rollYawRatePitch: new BABYLON.Vector3(uz, uyaw, -ux),
             throttle: uy 
         };
     }, {
@@ -675,7 +675,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
 
     private updateDroneState(drone: Drone, dt: number, t: number): void {
         let control = {
-            angularRates: new BABYLON.Vector3(0, 0, 0),
+            rollYawRatePitch: new BABYLON.Vector3(0, 0, 0),
             throttle: 0
         };
         try {
@@ -686,9 +686,9 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
 
         const inputVector = new Float64Array([
             control.throttle,
-            control.angularRates.x,
-            control.angularRates.y,
-            control.angularRates.z
+            control.rollYawRatePitch.x,
+            control.rollYawRatePitch.y,
+            control.rollYawRatePitch.z
         ]);
 
         const nstep = Math.ceil(dt / 0.005);

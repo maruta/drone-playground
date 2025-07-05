@@ -13,6 +13,8 @@ interface Drone {
     state: DroneState;
     label: GUI.Rectangle;
     rotorAnimation?: BABYLON.AnimationGroup;
+    isStopped?: boolean;
+    stopReason?: string;
 }
 
 interface DroneState {
@@ -23,8 +25,10 @@ interface DroneState {
 }
 
 interface ControlInput {
-    rollYawRatePitch: BABYLON.Vector3;
-    throttle: number;
+    rollYawRatePitch?: BABYLON.Vector3;
+    throttle?: number;
+    action?: 'normal' | 'despawn' | 'stop';
+    reason?: string;
 }
 
 declare global {
@@ -326,6 +330,22 @@ class DroneSimulator {
         let dy = state.velocity.y;
         let dz = state.velocity.z;
 
+        // Crash detection - if altitude is too low, stop the drone
+        if (py < 0.5) {
+            return {
+                action: 'stop',
+                reason: 'Crashed: Altitude too low'
+            };
+        }
+
+        // Example: Self-destruct after 30 seconds
+        if (t > 30) {
+            return {
+                action: 'despawn',
+                reason: 'Mission completed'
+            };
+        }
+
         // Desired positions
         let rx = radius * Math.cos(t + phase);
         let rz = radius * Math.sin(t + phase);
@@ -538,6 +558,31 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
         return label;
     }
 
+    private updateDroneLabel(drone: Drone): void {
+        const label = drone.label;
+        const textBlock = label.children[0] as GUI.TextBlock;
+        
+        if (drone.isStopped && drone.stopReason) {
+            const droneName = drone.mesh.name.replace('drone_', '');
+            textBlock.text = `${droneName}\n[STOPPED]\n${drone.stopReason}`;
+            textBlock.color = "red";
+            label.background = "darkred";
+        } else {
+            const droneName = drone.mesh.name.replace('drone_', '');
+            textBlock.text = droneName;
+            textBlock.color = "yellow";
+            label.background = "black";
+        }
+
+        // Recalculate label size
+        const nlines = textBlock.text.split('\n').length;
+        const maxLineWidth = textBlock.text.split('\n').reduce((max, line) => Math.max(max, this.advancedTexture.getContext().measureText(line).width), 0);
+        const estimatedWidth = maxLineWidth;
+        const estimatedHeight = nlines * 28;
+        label.width = `${estimatedWidth * 1.5}px`;
+        label.height = `${estimatedHeight}px`;
+    }
+
     private addDroneLabel(droneMesh: BABYLON.Mesh, label: GUI.Rectangle): void {
         this.advancedTexture.addControl(label);
         label.linkWithMesh(droneMesh);
@@ -674,21 +719,44 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
     }
 
     private updateDroneState(drone: Drone, dt: number, t: number): void {
-        let control = {
-            rollYawRatePitch: new BABYLON.Vector3(0, 0, 0),
-            throttle: 0
-        };
+        // Skip update if drone is stopped
+        if (drone.isStopped) {
+            return;
+        }
+
+        let control: ControlInput = {};
         try {
             control = drone.controller(drone.state, t);
         } catch (error) {
             console.error(`Error in controller for drone ${drone.mesh.name}:`, error);
         }
 
+        // Handle special actions
+        if (control.action === 'despawn') {
+            console.log(`Drone ${drone.mesh.name} requested despawn: ${control.reason || 'No reason provided'}`);
+            this.despawn(drone.mesh.name.replace('drone_', ''));
+            return;
+        }
+
+        if (control.action === 'stop') {
+            console.log(`Drone ${drone.mesh.name} requested stop: ${control.reason || 'No reason provided'}`);
+            drone.isStopped = true;
+            drone.stopReason = control.reason || 'Stopped by controller';
+            this.updateDroneLabel(drone);
+            // Stop rotor animations
+            drone.rotorAnimation?.stop();
+            return;
+        }
+
+        // Use default values for normal operation
+        const rollYawRatePitch = control.rollYawRatePitch || new BABYLON.Vector3(0, 0, 0);
+        const throttle = control.throttle || 0;
+
         const inputVector = new Float64Array([
-            control.throttle,
-            control.rollYawRatePitch.x,
-            control.rollYawRatePitch.y,
-            control.rollYawRatePitch.z
+            throttle,
+            rollYawRatePitch.x,
+            rollYawRatePitch.y,
+            rollYawRatePitch.z
         ]);
 
         const nstep = Math.ceil(dt / 0.005);

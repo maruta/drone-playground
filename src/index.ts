@@ -564,7 +564,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
         
         if (drone.isStopped && drone.stopReason) {
             const droneName = drone.mesh.name.replace('drone_', '');
-            textBlock.text = `${droneName}\n[STOPPED]\n${drone.stopReason}`;
+            textBlock.text = `${droneName}\n${drone.stopReason}`;
             textBlock.color = "red";
             label.background = "darkred";
         } else {
@@ -743,7 +743,6 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             drone.isStopped = true;
             drone.stopReason = control.reason || 'Stopped by controller';
             this.updateDroneLabel(drone);
-            // Stop rotor animations
             drone.rotorAnimation?.stop();
             return;
         }
@@ -820,6 +819,18 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
                     });
                 }
             }
+
+            // Sort drones by distance to camera and update label z-index
+            const sortedDrones = Array.from(this.drones.values()).sort((a, b) => {
+                const distA = BABYLON.Vector3.DistanceSquared(a.mesh.position, this.camera.position);
+                const distB = BABYLON.Vector3.DistanceSquared(b.mesh.position, this.camera.position);
+                return distB - distA;
+            });
+
+            sortedDrones.forEach((drone, index) => {
+                drone.label.zIndex = index;
+            });
+
             this.scene.render();
             frameCount++;
 
@@ -849,7 +860,13 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
     }
 }
 
-const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
-const editorContainer = document.getElementById('editorContainer') as HTMLElement;
+const canvas = document.getElementById('renderCanvas');
+if (!(canvas instanceof HTMLCanvasElement)) {
+    throw new Error("Element with id 'renderCanvas' is not an HTMLCanvasElement or not found.");
+}
+const editorContainer = document.getElementById('editorContainer');
+if (!editorContainer) {
+    throw new Error("Element with id 'editorContainer' not found.");
+}
 const simulator = new DroneSimulator(canvas, editorContainer);
 simulator.run();

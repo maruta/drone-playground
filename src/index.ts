@@ -62,7 +62,7 @@ class DroneSimulator {
     private droneCountIndicator!: HTMLElement;
     private cameraPositionIndicator!: HTMLElement;
     private cameraRotationIndicator!: HTMLElement;
-    private cameraSpeed: number = 0.25;
+    private cameraSpeed: number = 0.4;
     private trackScale: number = 200;
     private codeChanged: boolean = false;
 
@@ -210,8 +210,8 @@ class DroneSimulator {
 
             if (keys['w']) moveDirection.addInPlace(this.getForwardDirection());
             if (keys['s']) moveDirection.addInPlace(this.getForwardDirection().scale(-1));
-            if (keys['d']) moveDirection.addInPlace(this.getRightDirection().scale(-1));
-            if (keys['a']) moveDirection.addInPlace(this.getRightDirection());
+            if (keys['a']) moveDirection.addInPlace(this.getRightDirection().scale(-1));
+            if (keys['d']) moveDirection.addInPlace(this.getRightDirection());
             if (keys['q']) moveDirection.addInPlace(BABYLON.Vector3.Up());
             if (keys['e']) moveDirection.addInPlace(BABYLON.Vector3.Down());
 
@@ -223,15 +223,155 @@ class DroneSimulator {
         });
     }
 
-    private getForwardDirection(): BABYLON.Vector3 {
-        const forward = this.camera.target.subtract(this.camera.position);
-        forward.y = 0;
-        return forward.normalize();
+    /**
+     * Setup gamepad controller support for camera movement and simulation control
+     * Controls:
+     * - Left stick: Horizontal movement (XZ plane)
+     * - Right stick: Camera rotation
+     * - Triggers: Vertical movement (Y axis)
+     * - Start button: Pause/Resume simulation
+     * - Back button: Run editor code
+     * - A button: Clear all drones
+     */
+    private setupGamepadControl(): void {
+        const scene = this.scene;
+        const deadzone = 0.15; // Dead zone for analog sticks
+        const rotationSpeed = 0.03; // Camera rotation speed multiplier
+        const verticalSpeed = this.cameraSpeed; // Vertical movement speed
+
+        // Track button states for edge detection (prevent continuous triggering)
+        const buttonStates: { [key: number]: boolean } = {};
+
+        scene.onBeforeRenderObservable.add(() => {
+            // Get all connected gamepads
+            const gamepads = navigator.getGamepads();
+            
+            for (let i = 0; i < gamepads.length; i++) {
+                const gamepad = gamepads[i];
+                if (!gamepad) continue;
+
+                // === Button controls for simulation management ===
+                // Button 9 (Start) - Toggle pause/resume
+                if (gamepad.buttons[9] && gamepad.buttons[9].pressed) {
+                    if (!buttonStates[9]) {
+                        this.toggleSimulation();
+                        buttonStates[9] = true;
+                    }
+                } else {
+                    buttonStates[9] = false;
+                }
+
+                // Button 8 (Back/Select) - Run editor code
+                if (gamepad.buttons[8] && gamepad.buttons[8].pressed) {
+                    if (!buttonStates[8]) {
+                        this.runCode();
+                        buttonStates[8] = true;
+                    }
+                } else {
+                    buttonStates[8] = false;
+                }
+
+                // Button 0 (A/X) - Clear all drones
+                if (gamepad.buttons[0] && gamepad.buttons[0].pressed) {
+                    if (!buttonStates[0]) {
+                        this.despawnAll();
+                        buttonStates[0] = true;
+                    }
+                } else {
+                    buttonStates[0] = false;
+                }
+
+                // Left stick for horizontal movement (axes 0 and 1)
+                const leftStickX = Math.abs(gamepad.axes[0]) > deadzone ? gamepad.axes[0] : 0;
+                const leftStickY = Math.abs(gamepad.axes[1]) > deadzone ? gamepad.axes[1] : 0;
+
+                // Right stick for camera rotation (axes 2 and 3)
+                const rightStickX = Math.abs(gamepad.axes[2]) > deadzone ? gamepad.axes[2] : 0;
+                const rightStickY = Math.abs(gamepad.axes[3]) > deadzone ? gamepad.axes[3] : 0;
+
+                // Triggers for vertical movement (buttons 6 and 7, or axes 4 and 5 depending on controller)
+                let leftTrigger = 0;
+                let rightTrigger = 0;
+
+                // Try to get trigger values from buttons first
+                if (gamepad.buttons[6] && gamepad.buttons[6].value) {
+                    leftTrigger = gamepad.buttons[6].value;
+                }
+                if (gamepad.buttons[7] && gamepad.buttons[7].value) {
+                    rightTrigger = gamepad.buttons[7].value;
+                }
+
+                // Movement calculation
+                let moveDirection = BABYLON.Vector3.Zero();
+
+                // Left stick movement - horizontal plane only
+                if (leftStickX !== 0 || leftStickY !== 0) {
+                    const forward = this.getForwardDirection().scale(-leftStickY);
+                    const right = this.getRightDirection().scale(leftStickX);
+                    moveDirection.addInPlace(forward);
+                    moveDirection.addInPlace(right);
+                    // Ensure movement is only on the horizontal plane
+                    moveDirection.y = 0;
+                }
+
+                // Vertical movement from triggers
+                if (leftTrigger > 0) {
+                    moveDirection.addInPlace(BABYLON.Vector3.Down().scale(leftTrigger));
+                }
+                if (rightTrigger > 0) {
+                    moveDirection.addInPlace(BABYLON.Vector3.Up().scale(rightTrigger));
+                }
+
+                // Apply movement
+                if (!moveDirection.equals(BABYLON.Vector3.Zero())) {
+                    moveDirection.normalize().scaleInPlace(this.cameraSpeed);
+                    this.camera.target.addInPlace(moveDirection);
+                    this.camera.position.addInPlace(moveDirection);
+                }
+
+                // Right stick camera rotation
+                if (rightStickX !== 0) {
+                    this.camera.rotation.y += rightStickX * rotationSpeed;
+                }
+                if (rightStickY !== 0) {
+                    this.camera.rotation.x += rightStickY * rotationSpeed;
+                    // Clamp vertical rotation to prevent over-rotation
+                    this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                }
+
+                // Update camera target based on rotation
+                const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                this.camera.target = this.camera.position.add(direction);
+
+                break; // Only use the first connected gamepad
+            }
+        });
+
+        // Log gamepad connections
+        window.addEventListener("gamepadconnected", (e) => {
+            console.log(`Gamepad connected: ${e.gamepad.id}`);
+        });
+
+        window.addEventListener("gamepaddisconnected", (e) => {
+            console.log(`Gamepad disconnected: ${e.gamepad.id}`);
+        });
     }
 
+    /**
+     * Get forward direction based on camera yaw only (horizontal plane)
+     * This ensures movement speed is consistent regardless of camera pitch
+     */
+    private getForwardDirection(): BABYLON.Vector3 {
+        const yaw = this.camera.rotation.y;
+        return new BABYLON.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    }
+
+    /**
+     * Get right direction based on camera yaw only (horizontal plane)
+     */
     private getRightDirection(): BABYLON.Vector3 {
-        const forward = this.getForwardDirection();
-        return BABYLON.Vector3.Cross(forward, BABYLON.Vector3.Up());
+        const yaw = this.camera.rotation.y;
+        return new BABYLON.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     }
     
     private toggleSimulation(): void {
@@ -281,6 +421,9 @@ class DroneSimulator {
     private setupScene(): void {
         this.camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 3, -8), this.scene);
         this.camera.attachControl(this.canvas, true);
+        
+        // Disable default gamepad input to prevent interference with custom implementation
+        this.camera.inputs.removeByType("FreeCameraGamepadInput");
 
         const light = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(0, -1, 0), this.scene);
         light.position = new BABYLON.Vector3(20, 40, 20);
@@ -316,6 +459,7 @@ class DroneSimulator {
 
         //        new BABYLON.AxesViewer(this.scene, 3);
         this.setupCameraKeyboardControl();
+        this.setupGamepadControl();
         this.camera.inputs.addMouseWheel();
 
         (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
@@ -391,14 +535,14 @@ class DroneSimulator {
     }
 
     private updateHashFromCode(): void {
-        if (!this.codeChanged) return; // 変更がない場合は更新しない
+        if (!this.codeChanged) return; // Skip update if no changes
 
         const code = this.editor.getValue();
         const compressedCode = compressUrlSafe(code);
         const hash = btoa(compressedCode);
         window.location.hash = hash;
 
-        this.codeChanged = false; // 更新後にフラグをリセット
+        this.codeChanged = false; // Reset flag after update
     }
 
     private setupCodeEditor(): void {
@@ -878,7 +1022,7 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
 
             lastTime = currentTime;
             if (this.isSimulationRunning) {
-                // user control loop should run at least 60Hz
+                // User control loop should run at least 60Hz
                 let nstep = Math.ceil(dt / (1 / 60));
                 for (let i = 0; i < nstep; i++) {
                     this.t += dt / nstep;
@@ -887,6 +1031,9 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
                     });
                 }
             }
+
+            // Note: Label depth sorting would require using rendering groups or layers
+            // Currently labels render in creation order
 
             // Update label billboard behavior to face the camera
             this.drones.forEach((drone) => {

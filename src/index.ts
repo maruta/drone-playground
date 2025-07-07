@@ -11,7 +11,7 @@ interface Drone {
     controller: (state: DroneState, t: number) => ControlInput;
     dynamicSystem: DynamicSystem;
     state: DroneState;
-    label: GUI.Rectangle;
+    label: BABYLON.Mesh;
     rotorAnimation?: BABYLON.AnimationGroup;
     isStopped?: boolean;
     stopReason?: string;
@@ -92,6 +92,108 @@ class DroneSimulator {
         this.droneCountIndicator = document.getElementById('droneCount') as HTMLElement;
         this.cameraPositionIndicator = document.getElementById('cameraPosition') as HTMLElement;
         this.cameraRotationIndicator = document.getElementById('cameraRotation') as HTMLElement;
+    }
+
+    private calculateTextureSize(text: string): { textureWidth: number, textureHeight: number } {
+        // Create a temporary canvas to measure text
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d')!;
+        context.font = "bold 48px BIZ UDPGothic, Arial, sans-serif";
+        
+        const lines = text.split('\n');
+        const lineHeight = 60;
+        
+        // Calculate width (max line width)
+        let maxWidth = 0;
+        lines.forEach(line => {
+            if (line.trim()) {
+                const lineWidth = context.measureText(line).width;
+                maxWidth = Math.max(maxWidth, lineWidth);
+            }
+        });
+        
+        // Calculate texture dimensions with padding
+        const textureWidth = Math.max(256, maxWidth + 40);
+        const textureHeight = Math.max(64, lines.length * lineHeight + 20);
+        
+        return { textureWidth, textureHeight };
+    }
+
+    private updateTextTexture(texture: BABYLON.DynamicTexture, text: string, textColor: string, backgroundColor: string): void {
+        const context = texture.getContext() as CanvasRenderingContext2D;
+        const size = texture.getSize();
+        
+        context.clearRect(0, 0, size.width, size.height);
+        
+        context.fillStyle = backgroundColor;
+        context.fillRect(0, 0, size.width, size.height);
+        
+        context.font = "bold 48px BIZ UDPGothic, Arial, sans-serif";
+        context.fillStyle = textColor;
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        
+        const lines = text.split('\n');
+        const lineHeight = 60;
+        const totalHeight = lines.length * lineHeight;
+        const startY = (size.height - totalHeight) / 2 + lineHeight / 2;
+        
+        lines.forEach((line, index) => {
+            const yPos = startY + index * lineHeight;
+            context.fillText(line, size.width / 2, yPos);
+        });
+        
+        texture.update();
+    }
+
+    private createOrUpdateDroneLabel(droneName: string, text: string, textColor: string, backgroundColor: string, existingLabel?: BABYLON.Mesh): BABYLON.Mesh {
+        const { textureWidth, textureHeight } = this.calculateTextureSize(text);
+        const textTexture = new BABYLON.DynamicTexture("labelTexture_" + droneName, { width: textureWidth, height: textureHeight }, this.scene);
+        
+        let textMesh: BABYLON.Mesh;
+        
+        if (existingLabel) {
+            textMesh = existingLabel;
+            
+            const aspectRatio = textureWidth / textureHeight;
+            const worldHeight = textureHeight / 60;
+            const worldWidth = worldHeight * aspectRatio;
+            
+            const oldPosition = textMesh.position.clone();
+            const oldRotation = textMesh.rotation.clone();
+            const oldScaling = textMesh.scaling.clone();
+            
+            textMesh.dispose();
+            textMesh = BABYLON.MeshBuilder.CreatePlane("label_" + droneName, { width: worldWidth, height: worldHeight }, this.scene);
+            
+            textMesh.position = oldPosition;
+            textMesh.rotation = oldRotation;
+            textMesh.scaling = oldScaling;
+        } else {
+            const aspectRatio = textureWidth / textureHeight;
+            const worldHeight = textureHeight / 60;
+            const worldWidth = worldHeight * aspectRatio;
+            textMesh = BABYLON.MeshBuilder.CreatePlane("label_" + droneName, { width: worldWidth, height: worldHeight }, this.scene);
+            
+            textMesh.position = new BABYLON.Vector3(0, 1, 0);
+        }
+        
+        textTexture.hasAlpha = true;
+        
+        const textMaterial = new BABYLON.StandardMaterial("labelMaterial_" + droneName, this.scene);
+        textMaterial.diffuseTexture = textTexture;
+        textMaterial.emissiveTexture = textTexture;
+        textMaterial.emissiveColor = new BABYLON.Color3(1, 1, 1);
+        textMaterial.disableLighting = true;
+        textMaterial.backFaceCulling = false;
+        textMaterial.alphaMode = BABYLON.Engine.ALPHA_COMBINE;
+        textMaterial.useAlphaFromDiffuseTexture = true;
+        
+        textMesh.material = textMaterial;
+        
+        this.updateTextTexture(textTexture, text, textColor, backgroundColor);
+        
+        return textMesh;
     }
 
     private setupCameraKeyboardControl(): void {
@@ -525,7 +627,6 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             drone.mesh.position = drone.state.position;
             drone.mesh.rotationQuaternion = drone.state.rotationQuaternion;
             this.drones.set(droneName, drone);
-            this.addDroneLabel(drone.mesh, label);
 
             console.log(`Drone ${droneName} spawned at position:`, drone.state.position);
             console.log(`Initial state: ${JSON.stringify(drone.state)}`);
@@ -533,65 +634,32 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
             console.error(`Failed to spawn drone ${droneName}:`, error);
         }
     }
-    private createDroneLabel(droneName: string): GUI.Rectangle {
-        const label = new GUI.Rectangle("label for " + droneName);
-        label.background = "black";
-
-        label.alpha = 0.5;
-        label.cornerRadius = 10;
-        label.thickness = 0;
-        label.linkOffsetY = -100;
-
-        const text = new GUI.TextBlock();
-        text.text = droneName;
-        text.color = "yellow";
-        text.fontWeight = "bold";
-        text.fontSize = 24;
-        const nlines = text.text.split('\n').length;
-        const maxLineWidth = text.text.split('\n').reduce((max, line) => Math.max(max, this.advancedTexture.getContext().measureText(line).width), 0);
-        const estimatedWidth = maxLineWidth;
-        const estimatedHeight = nlines * 28;
-        label.width = `${estimatedWidth * 1.5}px`;
-        label.height = `${estimatedHeight}px`;
-        label.addControl(text);
-
-        return label;
+    private createDroneLabel(droneName: string): BABYLON.Mesh {
+        return this.createOrUpdateDroneLabel(droneName, droneName, "yellow", "rgba(0, 0, 0, 0.5)");
     }
 
     private updateDroneLabel(drone: Drone): void {
-        const label = drone.label;
-        const textBlock = label.children[0] as GUI.TextBlock;
+        const droneName = drone.mesh.name.replace('drone_', '');
+        let labelText: string;
+        let textColor: string;
+        let backgroundColor: string;
         
         if (drone.isStopped && drone.stopReason) {
-            const droneName = drone.mesh.name.replace('drone_', '');
-            textBlock.text = `${droneName}\n${drone.stopReason}`;
-            textBlock.color = "red";
-            label.background = "darkred";
+            labelText = `${droneName}\n${drone.stopReason}`;
+            textColor = "red";
+            backgroundColor = "rgba(139, 0, 0, 0.5)";
         } else {
-            const droneName = drone.mesh.name.replace('drone_', '');
-            textBlock.text = droneName;
-            textBlock.color = "yellow";
-            label.background = "black";
+            labelText = droneName;
+            textColor = "yellow";
+            backgroundColor = "rgba(0, 0, 0, 0.5)";
         }
-
-        // Recalculate label size
-        const nlines = textBlock.text.split('\n').length;
-        const maxLineWidth = textBlock.text.split('\n').reduce((max, line) => Math.max(max, this.advancedTexture.getContext().measureText(line).width), 0);
-        const estimatedWidth = maxLineWidth;
-        const estimatedHeight = nlines * 28;
-        label.width = `${estimatedWidth * 1.5}px`;
-        label.height = `${estimatedHeight}px`;
-    }
-
-    private addDroneLabel(droneMesh: BABYLON.Mesh, label: GUI.Rectangle): void {
-        this.advancedTexture.addControl(label);
-        label.linkWithMesh(droneMesh);
+        
+        drone.label = this.createOrUpdateDroneLabel(droneName, labelText, textColor, backgroundColor, drone.label);
     }
 
     public despawn(droneName: string): void {
         const drone = this.drones.get(droneName);
         if (drone) {
-            this.advancedTexture.removeControl(drone.label);
             drone.label.dispose();
             drone.mesh.dispose();
             this.drones.delete(droneName);
@@ -820,15 +888,27 @@ spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
                 }
             }
 
-            // Sort drones by distance to camera and update label z-index
-            const sortedDrones = Array.from(this.drones.values()).sort((a, b) => {
-                const distA = BABYLON.Vector3.DistanceSquared(a.mesh.position, this.camera.position);
-                const distB = BABYLON.Vector3.DistanceSquared(b.mesh.position, this.camera.position);
-                return distB - distA;
-            });
-
-            sortedDrones.forEach((drone, index) => {
-                drone.label.zIndex = index;
+            // Update label billboard behavior to face the camera
+            this.drones.forEach((drone) => {
+                const labelMesh = drone.label;
+                
+                // Update label position to follow drone (1 unit above)
+                labelMesh.position = drone.mesh.position.add(new BABYLON.Vector3(0, 1, 0));
+                
+                // Make label face the camera direction (screen-aligned billboard)
+                labelMesh.rotation.x = this.camera.rotation.x;
+                labelMesh.rotation.y = this.camera.rotation.y;
+                labelMesh.rotation.z = this.camera.rotation.z;
+                
+                // Scale based on depth (camera normal direction) for constant screen size
+                const cameraToLabel = labelMesh.position.subtract(this.camera.position);
+                const cameraForward = this.camera.getDirection(BABYLON.Vector3.Forward());
+                const depth = BABYLON.Vector3.Dot(cameraToLabel, cameraForward);
+                const baseScale = 0.02; // Base scale factor for screen-constant size
+                const distanceScale = Math.abs(depth) * baseScale; // Proportional to depth
+                
+                // Apply distance-based scaling
+                labelMesh.scaling = new BABYLON.Vector3(distanceScale, distanceScale, distanceScale);
             });
 
             this.scene.render();

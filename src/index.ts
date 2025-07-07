@@ -4,7 +4,8 @@ import { GridMaterial, ShadowOnlyMaterial } from 'babylonjs-materials';
 import * as monaco from 'monaco-editor';
 import { DynamicSystem, vectorAdd, vectorScale } from './dynamicSystem';
 import * as GUI from 'babylonjs-gui';
-import { compressUrlSafe, decompressUrlSafe } from './vendor/lzma-url.mjs'
+import { compressUrlSafe, decompressUrlSafe } from './vendor/lzma-url.mjs';
+import defaultCode from '../example/default.js?raw';
 
 interface Drone {
     mesh: BABYLON.Mesh;
@@ -563,67 +564,7 @@ class DroneSimulator {
 
 
         this.editor = monaco.editor.create(this.editorContainer, {
-            value: `function spawnDrone(name, x, y, z) {
-    const phase = Math.random() * 2 * Math.PI;
-    const radius = Math.random() * 6 + 1;
-
-    simulator.spawn(name, (state, t) => {
-        // Current state variables
-        let px = state.position.x;
-        let py = state.position.y;
-        let pz = state.position.z;
-        let dx = state.velocity.x;
-        let dy = state.velocity.y;
-        let dz = state.velocity.z;
-
-        // Crash detection - if altitude is too low, stop the drone
-        if (py < 0.5) {
-            return {
-                action: 'stop',
-                reason: 'Crashed: Altitude too low'
-            };
-        }
-
-        // Example: Self-destruct after 30 seconds
-        if (t > 30) {
-            return {
-                action: 'despawn',
-                reason: 'Mission completed'
-            };
-        }
-
-        // Desired positions
-        let rx = radius * Math.cos(t + phase);
-        let rz = radius * Math.sin(t + phase);
-        let drx = -radius * Math.sin(t + phase);
-        let drz = radius * Math.cos(t + phase);
-
-        // Rotation and angle calculations
-        let angle = state.rotationQuaternion.toEulerAngles();
-        let uyaw = -10 * angle.y - 10 * state.angularVelocity.y;
-
-        // Control parameters
-        const Kp = 0.2, Kd = Kp * 0.6;
-        const ry = 2;
-
-        // Control inputs
-        let uy = 9.81 + 10 * ((ry - py) + 1 * (0 - dy));
-        let ux = Kp * (rx - px) + Kd * (drx - dx);
-        let uz = Kp * (rz - pz) + Kd * (drz - dz);
-
-        return {
-            rollYawRatePitch: new BABYLON.Vector3(uz, uyaw, -ux),
-            throttle: uy 
-        };
-    }, {
-        position: new BABYLON.Vector3(x, y, z)
-    });
-}
-
-// Spawn a drone with a random name and initial position
-spawnDrone("#" + Math.floor(Math.random() * 1000), 0, 2, 0);
-
-`,
+            value: defaultCode,
             language: 'javascript',
             theme: 'myTheme',
             minimap: { enabled: false },

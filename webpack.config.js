@@ -20,6 +20,11 @@ module.exports = {
       {
         test: /\.ttf$/,
         use: ['file-loader']
+      },
+      {
+        test: /\.js$/,
+        resourceQuery: /raw/,
+        type: 'asset/source'
       }
     ],
   },
@@ -41,7 +46,8 @@ module.exports = {
     }),
     new CopyWebpackPlugin({
       patterns: [
-          { from: 'static' }
+          { from: 'static' },
+          { from: 'example', to: 'example' }
       ]
     }),
   ],

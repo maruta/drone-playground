@@ -947,7 +947,7 @@ class DroneSimulator {
 
                 const baseScale = 0.02;
                 const distanceScale = Math.abs(depth) * baseScale;
-                const screenOffset = distanceScale * labelMeshSize.y + 1; // Offset to avoid overlap with the drone
+                const screenOffset = distanceScale * (labelMeshSize.y*0.5 + 1) + 0.5;
                 labelMesh.position = drone.mesh.position.add(cameraUp.scale(screenOffset));
 
                 labelMesh.scaling = new BABYLON.Vector3(distanceScale, distanceScale, distanceScale);

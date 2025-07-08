@@ -70,6 +70,10 @@ class DroneSimulator {
     private filteredDroneVelocity: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
     private cameraBasePosition: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
     private cameraBaseTarget: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
+    private cameraRelativePosition: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
+    private cameraRelativeTarget: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
+    private keys: { [key: string]: boolean } = {};
+    private lastDragDistance: number = 0;
 
     constructor(canvas: HTMLCanvasElement, editorContainer: HTMLElement) {
         this.canvas = canvas;
@@ -200,31 +204,76 @@ class DroneSimulator {
 
     private setupCameraKeyboardControl(): void {
         const scene = this.scene;
-
-        const keys: { [key: string]: boolean } = {};
-
+        
         scene.onKeyboardObservable.add((kbInfo) => {
-            keys[kbInfo.event.key.toLowerCase()] = (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN);
+            const keyName = kbInfo.event.key.toLowerCase();
+            
+            if (keyName.startsWith('arrow')) {
+                kbInfo.event.preventDefault();
+            }
+            
+            if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+                this.keys[keyName] = true;
+            } else if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYUP) {
+                this.keys[keyName] = false;
+            }
+        });
+
+        // Reset key states when focus is lost
+        window.addEventListener('blur', () => {
+            Object.keys(this.keys).forEach(key => {
+                this.keys[key] = false;
+            });
+        });
+        
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                Object.keys(this.keys).forEach(key => {
+                    this.keys[key] = false;
+                });
+            }
         });
 
         scene.onBeforeRenderObservable.add(() => {
             let moveDirection = BABYLON.Vector3.Zero();
 
-            if (keys['w']) moveDirection.addInPlace(this.getForwardDirection());
-            if (keys['s']) moveDirection.addInPlace(this.getForwardDirection().scale(-1));
-            if (keys['a']) moveDirection.addInPlace(this.getRightDirection().scale(-1));
-            if (keys['d']) moveDirection.addInPlace(this.getRightDirection());
-            if (keys['q']) moveDirection.addInPlace(BABYLON.Vector3.Up());
-            if (keys['e']) moveDirection.addInPlace(BABYLON.Vector3.Down());
+            if (this.keys['w']) moveDirection.addInPlace(this.getForwardDirection());
+            if (this.keys['s']) moveDirection.addInPlace(this.getForwardDirection().scale(-1));
+            if (this.keys['a']) moveDirection.addInPlace(this.getRightDirection().scale(-1));
+            if (this.keys['d']) moveDirection.addInPlace(this.getRightDirection());
+            if (this.keys['q']) moveDirection.addInPlace(BABYLON.Vector3.Up());
+            if (this.keys['e']) moveDirection.addInPlace(BABYLON.Vector3.Down());
 
             if (!moveDirection.equals(BABYLON.Vector3.Zero())) {
                 moveDirection.normalize().scaleInPlace(this.cameraSpeed);
                 if (this.followedDroneName) {
-                    this.cameraBaseTarget.addInPlace(moveDirection);
-                    this.cameraBasePosition.addInPlace(moveDirection);
+                    this.cameraRelativePosition.addInPlace(moveDirection);
+                    this.cameraRelativeTarget.addInPlace(moveDirection);
                 } else {
                     this.camera.target.addInPlace(moveDirection);
                     this.camera.position.addInPlace(moveDirection);
+                }
+            }
+
+            const rotationSpeed = 0.02;
+            let deltaYaw = 0;
+            let deltaPitch = 0;
+
+            if (this.keys['arrowleft']) deltaYaw -= rotationSpeed;
+            if (this.keys['arrowright']) deltaYaw += rotationSpeed;
+            if (this.keys['arrowup']) deltaPitch -= rotationSpeed;
+            if (this.keys['arrowdown']) deltaPitch += rotationSpeed;
+
+            if (deltaYaw !== 0 || deltaPitch !== 0) {
+                if (this.followedDroneName) {
+                    this.rotateAroundDrone(deltaYaw, deltaPitch);
+                } else {
+                    this.camera.rotation.y += deltaYaw;
+                    this.camera.rotation.x += deltaPitch;
+                    this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                    
+                    const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                    this.camera.target = this.camera.position.add(direction);
                 }
             }
         });
@@ -235,6 +284,22 @@ class DroneSimulator {
      */
     private setupMouseClickHandler(): void {
         this.canvas.addEventListener('click', (event) => {
+            // Only process click if there was no significant drag
+            const dragThreshold = 5; // pixels
+            if (this.lastDragDistance > dragThreshold) {
+                // Reset drag distance and ignore this click
+                this.lastDragDistance = 0;
+                return;
+            }
+            
+            // Clear all arrow key states on any click
+            const arrowKeys = ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'];
+            arrowKeys.forEach(key => {
+                if (this.keys[key]) {
+                    this.keys[key] = false;
+                }
+            });
+            
             const pickInfo = this.scene.pick(event.offsetX, event.offsetY);
             
             if (pickInfo.hit && pickInfo.pickedMesh) {
@@ -263,13 +328,24 @@ class DroneSimulator {
     private setFollowedDrone(droneName: string): void {
         if (this.followedDroneName !== droneName) {
             const previousFollowedDrone = this.followedDroneName;
-            this.followedDroneName = droneName;
-            this.cameraBasePosition = this.camera.position.clone();
-            this.cameraBaseTarget = this.camera.target.clone();
             
-            // Initialize camera velocity to match drone's XZ velocity
+            // Reset ALL key states before switching modes
+            Object.keys(this.keys).forEach(key => {
+                this.keys[key] = false;
+            });
+            
+            this.followedDroneName = droneName;
+            
+            // Record relative position from drone to camera
             if (this.drones.has(droneName)) {
                 const followedDrone = this.drones.get(droneName)!;
+                const dronePosition = followedDrone.state.position;
+                
+                // Calculate relative position and target
+                this.cameraRelativePosition = this.camera.position.subtract(dronePosition);
+                this.cameraRelativeTarget = this.camera.target.subtract(dronePosition);
+                
+                // Initialize camera velocity to match drone's XZ velocity
                 const droneVelocity = followedDrone.state.velocity;
                 this.filteredDroneVelocity = new BABYLON.Vector3(droneVelocity.x, 0, droneVelocity.z);
             } else {
@@ -283,17 +359,16 @@ class DroneSimulator {
             if (this.drones.has(droneName)) {
                 this.updateDroneLabel(this.drones.get(droneName)!);
             }
-            
-            console.log(`Following drone: ${droneName}`);
         }
     }
 
     private clearFollowedDrone(): void {
         if (this.followedDroneName) {
             const previousFollowedDrone = this.followedDroneName;
-            console.log(`Stopped following drone: ${this.followedDroneName}`);
             this.followedDroneName = null;
             this.filteredDroneVelocity = new BABYLON.Vector3(0, 0, 0);
+            this.cameraRelativePosition = new BABYLON.Vector3(0, 0, 0);
+            this.cameraRelativeTarget = new BABYLON.Vector3(0, 0, 0);
             
             if (this.drones.has(previousFollowedDrone)) {
                 this.updateDroneLabel(this.drones.get(previousFollowedDrone)!);
@@ -306,58 +381,233 @@ class DroneSimulator {
      */
     private setupCustomCameraControls(): void {
         const scene = this.scene;
-        let isPointerDown = false;
+        let isRightPointerDown = false;
+        let isLeftPointerDown = false;
         let lastPointerX = 0;
         let lastPointerY = 0;
         let isTouchRotating = false;
+        let isTouchMoving = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let totalDragDistance = 0;
+        
+        // Touch-specific tracking
+        let touchStartDistance = 0;
+        let touchCenterX = 0;
+        let touchCenterY = 0;
+        let lastTouchCenterX = 0;
+        let lastTouchCenterY = 0;
+        const activeTouches = new Map<number, { x: number, y: number }>();
 
         scene.onPointerObservable.add((pointerInfo) => {
+            const evt = pointerInfo.event as PointerEvent;
+            const isTouch = evt.pointerType === 'touch';
+            
             switch (pointerInfo.type) {
                 case BABYLON.PointerEventTypes.POINTERDOWN:
-                    // Check for right mouse button or touch event (button === undefined for touch)
-                    const isTouch = pointerInfo.event.button === undefined || pointerInfo.event.button === -1;
-                    if (pointerInfo.event.button === 2 || isTouch) {
-                        isPointerDown = true;
-                        isTouchRotating = isTouch;
-                        lastPointerX = pointerInfo.event.clientX;
-                        lastPointerY = pointerInfo.event.clientY;
+                    if (isTouch) {
+                        activeTouches.set(evt.pointerId, { x: evt.clientX, y: evt.clientY });
+                        
+                        if (activeTouches.size === 1) {
+                            isTouchRotating = true;
+                            lastPointerX = evt.clientX;
+                            lastPointerY = evt.clientY;
+                            dragStartX = evt.clientX;
+                            dragStartY = evt.clientY;
+                            totalDragDistance = 0;
+                        } else if (activeTouches.size === 2) {
+                            isTouchRotating = false;
+                            isTouchMoving = true;
+                            
+                            const touches = Array.from(activeTouches.values());
+                            touchCenterX = (touches[0].x + touches[1].x) / 2;
+                            touchCenterY = (touches[0].y + touches[1].y) / 2;
+                            lastTouchCenterX = touchCenterX;
+                            lastTouchCenterY = touchCenterY;
+                            
+                            // Calculate initial distance for pinch zoom (not implemented yet)
+                            const dx = touches[1].x - touches[0].x;
+                            const dy = touches[1].y - touches[0].y;
+                            touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+                        }
+                        } else {
+                            if (evt.button === 0) {
+                                isLeftPointerDown = true;
+                            lastPointerX = evt.clientX;
+                            lastPointerY = evt.clientY;
+                            dragStartX = evt.clientX;
+                            dragStartY = evt.clientY;
+                            totalDragDistance = 0;
+                        } else if (evt.button === 2) {
+                            // Right mouse button for rotation
+                            isRightPointerDown = true;
+                            lastPointerX = evt.clientX;
+                            lastPointerY = evt.clientY;
+                        }
                     }
                     break;
 
                 case BABYLON.PointerEventTypes.POINTERUP:
-                    if (pointerInfo.event.button === 2 || isTouchRotating) {
-                        isPointerDown = false;
-                        isTouchRotating = false;
+                    if (isTouch) {
+                        activeTouches.delete(evt.pointerId);
+                        
+                        if (activeTouches.size === 0) {
+                            // All touches released
+                            if (isTouchRotating) {
+                                this.lastDragDistance = totalDragDistance;
+                            }
+                            isTouchRotating = false;
+                            isTouchMoving = false;
+                        } else if (activeTouches.size === 1 && isTouchMoving) {
+                            // Switched from two touches to one
+                            isTouchMoving = false;
+                            isTouchRotating = true;
+                            const remainingTouch = Array.from(activeTouches.values())[0];
+                            lastPointerX = remainingTouch.x;
+                            lastPointerY = remainingTouch.y;
+                        }
+                    } else {
+                        // Mouse events
+                        if (evt.button === 0) {
+                            isLeftPointerDown = false;
+                            this.lastDragDistance = totalDragDistance;
+                        } else if (evt.button === 2) {
+                            isRightPointerDown = false;
+                        }
                     }
                     break;
 
                 case BABYLON.PointerEventTypes.POINTERMOVE:
-                    if (isPointerDown) {
-                        const deltaX = pointerInfo.event.clientX - lastPointerX;
-                        const deltaY = pointerInfo.event.clientY - lastPointerY;
-                        
-                        const rotationSpeed = isTouchRotating ? 0.005 : 0.003;
-                        this.camera.rotation.y += deltaX * rotationSpeed;
-                        this.camera.rotation.x += deltaY * rotationSpeed;
-                        
-                        this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
-                        
-                        if (this.followedDroneName) {
-                            const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
-                            this.cameraBaseTarget = this.cameraBasePosition.add(direction);
-                        } else {
-                            const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
-                            this.camera.target = this.camera.position.add(direction);
+                    if (isTouch) {
+                        // Update touch position
+                        if (activeTouches.has(evt.pointerId)) {
+                            activeTouches.set(evt.pointerId, { x: evt.clientX, y: evt.clientY });
                         }
                         
-                        lastPointerX = pointerInfo.event.clientX;
-                        lastPointerY = pointerInfo.event.clientY;
+                        if (isTouchRotating && activeTouches.size === 1) {
+                            // Single touch rotation
+                            const deltaX = evt.clientX - lastPointerX;
+                            const deltaY = evt.clientY - lastPointerY;
+                            const rotationSpeed = 0.005;
+                            
+                            if (this.followedDroneName) {
+                                this.rotateAroundDrone(deltaX * rotationSpeed, deltaY * rotationSpeed);
+                            } else {
+                                this.camera.rotation.y += deltaX * rotationSpeed;
+                                this.camera.rotation.x += deltaY * rotationSpeed;
+                                this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                                
+                                const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                                this.camera.target = this.camera.position.add(direction);
+                            }
+                            
+                            lastPointerX = evt.clientX;
+                            lastPointerY = evt.clientY;
+                            totalDragDistance += Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                        } else if (isTouchMoving && activeTouches.size === 2) {
+                            // Two touch movement
+                            const touches = Array.from(activeTouches.values());
+                            touchCenterX = (touches[0].x + touches[1].x) / 2;
+                            touchCenterY = (touches[0].y + touches[1].y) / 2;
+                            
+                            const deltaX = touchCenterX - lastTouchCenterX;
+                            const deltaY = touchCenterY - lastTouchCenterY;
+                            const moveSpeed = 0.02;
+                            
+                            const right = this.getRightDirection();
+                            const moveVector = right.scale(-deltaX * moveSpeed)
+                                .add(BABYLON.Vector3.Up().scale(deltaY * moveSpeed));
+                            
+                            if (this.followedDroneName) {
+                                this.cameraRelativePosition.addInPlace(moveVector);
+                                this.cameraRelativeTarget.addInPlace(moveVector);
+                            } else {
+                                this.camera.position.addInPlace(moveVector);
+                                this.camera.target.addInPlace(moveVector);
+                            }
+                            
+                            lastTouchCenterX = touchCenterX;
+                            lastTouchCenterY = touchCenterY;
+                        }
+                    } else {
+                        // Mouse movement
+                        const deltaX = evt.clientX - lastPointerX;
+                        const deltaY = evt.clientY - lastPointerY;
+                        
+                        if (isLeftPointerDown) {
+                            // Camera movement with left drag
+                            const moveSpeed = 0.02;
+                            const right = this.getRightDirection();
+                            const moveVector = right.scale(-deltaX * moveSpeed)
+                                .add(BABYLON.Vector3.Up().scale(deltaY * moveSpeed));
+                            
+                            if (this.followedDroneName) {
+                                this.cameraRelativePosition.addInPlace(moveVector);
+                                this.cameraRelativeTarget.addInPlace(moveVector);
+                            } else {
+                                this.camera.position.addInPlace(moveVector);
+                                this.camera.target.addInPlace(moveVector);
+                            }
+                            
+                            totalDragDistance += Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                        } else if (isRightPointerDown) {
+                            // Camera rotation with right drag
+                            const rotationSpeed = 0.003;
+                            
+                            if (this.followedDroneName) {
+                                this.rotateAroundDrone(deltaX * rotationSpeed, deltaY * rotationSpeed);
+                            } else {
+                                this.camera.rotation.y += deltaX * rotationSpeed;
+                                this.camera.rotation.x += deltaY * rotationSpeed;
+                                this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                                
+                                const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                                this.camera.target = this.camera.position.add(direction);
+                            }
+                        }
+                        
+                        lastPointerX = evt.clientX;
+                        lastPointerY = evt.clientY;
                     }
                     break;
             }
         });
 
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
+    /**
+     * Setup mouse wheel for zooming in follow mode
+     */
+    private setupMouseWheel(): void {
+        this.canvas.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            
+            const zoomSpeed = 0.1;
+            const delta = event.deltaY > 0 ? 1 : -1;
+            
+            if (this.followedDroneName) {
+                // In follow mode, move along the direction from drone to camera
+                const distance = this.cameraRelativePosition.length();
+                const direction = this.cameraRelativePosition.normalizeToNew();
+                
+                // Prevent getting too close or too far
+                const newDistance = Math.max(2, Math.min(50, distance + delta * zoomSpeed * distance));
+                
+                // Update relative position while maintaining direction
+                this.cameraRelativePosition = direction.scale(newDistance);
+                
+                // Update relative target to maintain the same view direction
+                const cameraDirection = this.camera.getDirection(BABYLON.Vector3.Forward());
+                this.cameraRelativeTarget = this.cameraRelativePosition.add(cameraDirection);
+            } else {
+                // Normal mode - move along camera forward direction
+                const forward = this.camera.getDirection(BABYLON.Vector3.Forward());
+                const moveVector = forward.scale(-delta * zoomSpeed * 5);
+                this.camera.position.addInPlace(moveVector);
+                this.camera.target.addInPlace(moveVector);
+            }
+        });
     }
 
     private setupGamepadControl(): void {
@@ -439,27 +689,27 @@ class DroneSimulator {
                 if (!moveDirection.equals(BABYLON.Vector3.Zero())) {
                     moveDirection.normalize().scaleInPlace(this.cameraSpeed);
                     if (this.followedDroneName) {
-                        this.cameraBaseTarget.addInPlace(moveDirection);
-                        this.cameraBasePosition.addInPlace(moveDirection);
+                        this.cameraRelativePosition.addInPlace(moveDirection);
+                        this.cameraRelativeTarget.addInPlace(moveDirection);
                     } else {
                         this.camera.target.addInPlace(moveDirection);
                         this.camera.position.addInPlace(moveDirection);
                     }
                 }
 
-                if (rightStickX !== 0) {
-                    this.camera.rotation.y += rightStickX * rotationSpeed;
-                }
-                if (rightStickY !== 0) {
-                    this.camera.rotation.x += rightStickY * rotationSpeed;
-                    this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
-                }
-
-                const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
-                if (this.followedDroneName) {
-                    this.cameraBaseTarget = this.cameraBasePosition.add(direction);
-                } else {
-                    this.camera.target = this.camera.position.add(direction);
+                if (rightStickX !== 0 || rightStickY !== 0) {
+                    if (this.followedDroneName) {
+                        // Rotate around drone
+                        this.rotateAroundDrone(rightStickX * rotationSpeed, rightStickY * rotationSpeed);
+                    } else {
+                        // Normal camera rotation
+                        this.camera.rotation.y += rightStickX * rotationSpeed;
+                        this.camera.rotation.x += rightStickY * rotationSpeed;
+                        this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                        
+                        const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                        this.camera.target = this.camera.position.add(direction);
+                    }
                 }
 
                 break;
@@ -483,6 +733,35 @@ class DroneSimulator {
     private getRightDirection(): BABYLON.Vector3 {
         const yaw = this.camera.rotation.y;
         return new BABYLON.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    }
+
+    private rotateAroundDrone(deltaYaw: number, deltaPitch: number): void {
+        if (!this.followedDroneName) return;
+        
+        // Create rotation quaternion for yaw rotation around Y-axis
+        const yawRotation = BABYLON.Quaternion.RotationAxis(BABYLON.Vector3.Up(), deltaYaw);
+        
+        // Create rotation quaternion for pitch rotation around the camera's right axis
+        const cameraRight = this.camera.getDirection(BABYLON.Vector3.Right());
+        const pitchRotation = BABYLON.Quaternion.RotationAxis(cameraRight, deltaPitch);
+        
+        // Apply yaw rotation first, then pitch
+        const rotatedByYaw = this.cameraRelativePosition.clone();
+        rotatedByYaw.rotateByQuaternionAroundPointToRef(yawRotation, BABYLON.Vector3.Zero(), rotatedByYaw);
+        
+        const finalRotated = rotatedByYaw.clone();
+        finalRotated.rotateByQuaternionAroundPointToRef(pitchRotation, BABYLON.Vector3.Zero(), finalRotated);
+        
+        this.cameraRelativePosition = finalRotated;
+        
+        // Maintain camera orientation to keep drone at same screen position
+        this.camera.rotation.y += deltaYaw;
+        this.camera.rotation.x += deltaPitch;
+        this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+        
+        // Update relative target based on new camera orientation
+        const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+        this.cameraRelativeTarget = this.cameraRelativePosition.add(direction);
     }
     
     private toggleSimulation(): void {
@@ -532,6 +811,9 @@ class DroneSimulator {
         this.camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 3, -8), this.scene);
         this.camera.attachControl(this.canvas, true);
         
+        // Remove default camera inputs to prevent conflicts
+        this.camera.inputs.removeByType("FreeCameraKeyboardMoveInput");
+        this.camera.inputs.removeByType("FreeCameraMouseInput");
         this.camera.inputs.removeByType("FreeCameraGamepadInput");
 
         const light = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(0, -1, 0), this.scene);
@@ -539,7 +821,6 @@ class DroneSimulator {
         light.intensity = 7;
         light.shadowEnabled = true;
         new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.scene);
-
 
         const gridMaterial = new GridMaterial("gridMaterial", this.scene);
         gridMaterial.majorUnitFrequency = 5;
@@ -566,16 +847,14 @@ class DroneSimulator {
 
         this.createOvalTrack();
 
-                this.setupCameraKeyboardControl();
+        this.setupCameraKeyboardControl();
         this.setupGamepadControl();
         this.setupMouseClickHandler();
         this.setupCustomCameraControls();
-        this.camera.inputs.addMouseWheel();
+        this.setupMouseWheel();
 
         (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
         (this.camera.inputs.attached as any).touch.touchAngularSensibility = 5000;
-        (this.camera.inputs.attached as any).mousewheel.wheelPrecisionX = 0.2;
-        (this.camera.inputs.attached as any).mousewheel.wheelPrecisionY = 0.2;
 
         console.log("Scene setup completed");
     }
@@ -1143,19 +1422,11 @@ class DroneSimulator {
         }
 
         const followedDrone = this.drones.get(this.followedDroneName)!;
-        let droneVelocity = followedDrone.state.velocity;
+        const dronePosition = followedDrone.state.position;
         
-        if (followedDrone.isStopped) {
-            droneVelocity = new BABYLON.Vector3(0, 0, 0);
-        }
-
-        const cameraVelocity = new BABYLON.Vector3(droneVelocity.x, 0, droneVelocity.z);
-        
-        this.cameraBasePosition.addInPlace(cameraVelocity.scale(dt));
-        this.cameraBaseTarget.addInPlace(cameraVelocity.scale(dt));
-        
-        this.camera.position = this.cameraBasePosition.clone();
-        this.camera.target = this.cameraBaseTarget.clone();
+        // Maintain relative position from drone
+        this.camera.position = dronePosition.add(this.cameraRelativePosition);
+        this.camera.target = dronePosition.add(this.cameraRelativeTarget);
     }
 }
 

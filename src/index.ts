@@ -66,6 +66,10 @@ class DroneSimulator {
     private cameraSpeed: number = 0.4;
     private trackScale: number = 200;
     private codeChanged: boolean = false;
+    private followedDroneName: string | null = null;
+    private filteredDroneVelocity: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
+    private cameraBasePosition: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
+    private cameraBaseTarget: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
 
     constructor(canvas: HTMLCanvasElement, editorContainer: HTMLElement) {
         this.canvas = canvas;
@@ -215,20 +219,93 @@ class DroneSimulator {
 
             if (!moveDirection.equals(BABYLON.Vector3.Zero())) {
                 moveDirection.normalize().scaleInPlace(this.cameraSpeed);
-                this.camera.target.addInPlace(moveDirection);
-                this.camera.position.addInPlace(moveDirection);
+                if (this.followedDroneName) {
+                    this.cameraBaseTarget.addInPlace(moveDirection);
+                    this.cameraBasePosition.addInPlace(moveDirection);
+                } else {
+                    this.camera.target.addInPlace(moveDirection);
+                    this.camera.position.addInPlace(moveDirection);
+                }
             }
         });
     }
 
     /**
-     * Setup gamepad controller support for camera movement and simulation control
+     * Setup drone click handler for camera following mode
      */
+    private setupMouseClickHandler(): void {
+        this.canvas.addEventListener('click', (event) => {
+            const pickInfo = this.scene.pick(event.offsetX, event.offsetY);
+            
+            if (pickInfo.hit && pickInfo.pickedMesh) {
+                // Check if clicked mesh is a drone or drone label
+                let droneName: string | null = null;
+                for (const [name, drone] of this.drones) {
+                    if (pickInfo.pickedMesh === drone.mesh || 
+                        drone.mesh.getChildMeshes().includes(pickInfo.pickedMesh) ||
+                        pickInfo.pickedMesh === drone.label) {
+                        droneName = name;
+                        break;
+                    }
+                }
+                
+                if (droneName) {
+                    this.setFollowedDrone(droneName);
+                } else {
+                    this.clearFollowedDrone();
+                }
+            } else {
+                this.clearFollowedDrone();
+            }
+        });
+    }
+
+    private setFollowedDrone(droneName: string): void {
+        if (this.followedDroneName !== droneName) {
+            const previousFollowedDrone = this.followedDroneName;
+            this.followedDroneName = droneName;
+            this.cameraBasePosition = this.camera.position.clone();
+            this.cameraBaseTarget = this.camera.target.clone();
+            
+            // Initialize camera velocity to match drone's XZ velocity
+            if (this.drones.has(droneName)) {
+                const followedDrone = this.drones.get(droneName)!;
+                const droneVelocity = followedDrone.state.velocity;
+                this.filteredDroneVelocity = new BABYLON.Vector3(droneVelocity.x, 0, droneVelocity.z);
+            } else {
+                this.filteredDroneVelocity = new BABYLON.Vector3(0, 0, 0);
+            }
+            
+            // Update label colors
+            if (previousFollowedDrone && this.drones.has(previousFollowedDrone)) {
+                this.updateDroneLabel(this.drones.get(previousFollowedDrone)!);
+            }
+            if (this.drones.has(droneName)) {
+                this.updateDroneLabel(this.drones.get(droneName)!);
+            }
+            
+            console.log(`Following drone: ${droneName}`);
+        }
+    }
+
+    private clearFollowedDrone(): void {
+        if (this.followedDroneName) {
+            const previousFollowedDrone = this.followedDroneName;
+            console.log(`Stopped following drone: ${this.followedDroneName}`);
+            this.followedDroneName = null;
+            this.filteredDroneVelocity = new BABYLON.Vector3(0, 0, 0);
+            
+            if (this.drones.has(previousFollowedDrone)) {
+                this.updateDroneLabel(this.drones.get(previousFollowedDrone)!);
+            }
+        }
+    }
+
     private setupGamepadControl(): void {
         const scene = this.scene;
-        const deadzone = 0.15; // Dead zone for analog sticks
-        const rotationSpeed = 0.03; // Camera rotation speed multiplier
-        const verticalSpeed = this.cameraSpeed; // Vertical movement speed
+        const deadzone = 0.15;
+        const rotationSpeed = 0.03;
+        const verticalSpeed = this.cameraSpeed;
 
         const buttonStates: { [key: number]: boolean } = {};
 
@@ -240,7 +317,6 @@ class DroneSimulator {
                 const gamepad = gamepads[i];
                 if (!gamepad) continue;
 
-                // Button controls for simulation management
                 if (gamepad.buttons[9] && gamepad.buttons[9].pressed) {
                     if (!buttonStates[9]) {
                         this.toggleSimulation();
@@ -268,7 +344,6 @@ class DroneSimulator {
                     buttonStates[0] = false;
                 }
 
-                // Movement input processing
                 const leftStickX = Math.abs(gamepad.axes[0]) > deadzone ? gamepad.axes[0] : 0;
                 const leftStickY = Math.abs(gamepad.axes[1]) > deadzone ? gamepad.axes[1] : 0;
 
@@ -304,8 +379,13 @@ class DroneSimulator {
 
                 if (!moveDirection.equals(BABYLON.Vector3.Zero())) {
                     moveDirection.normalize().scaleInPlace(this.cameraSpeed);
-                    this.camera.target.addInPlace(moveDirection);
-                    this.camera.position.addInPlace(moveDirection);
+                    if (this.followedDroneName) {
+                        this.cameraBaseTarget.addInPlace(moveDirection);
+                        this.cameraBasePosition.addInPlace(moveDirection);
+                    } else {
+                        this.camera.target.addInPlace(moveDirection);
+                        this.camera.position.addInPlace(moveDirection);
+                    }
                 }
 
                 if (rightStickX !== 0) {
@@ -317,7 +397,11 @@ class DroneSimulator {
                 }
 
                 const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
-                this.camera.target = this.camera.position.add(direction);
+                if (this.followedDroneName) {
+                    this.cameraBaseTarget = this.cameraBasePosition.add(direction);
+                } else {
+                    this.camera.target = this.camera.position.add(direction);
+                }
 
                 break;
             }
@@ -378,6 +462,7 @@ class DroneSimulator {
     }
 
     public despawnAll(): void {
+        this.clearFollowedDrone();
         this.drones.forEach((drone, name) => {
             this.despawn(name);
         });
@@ -424,6 +509,7 @@ class DroneSimulator {
 
                 this.setupCameraKeyboardControl();
         this.setupGamepadControl();
+        this.setupMouseClickHandler();
         this.camera.inputs.addMouseWheel();
 
         (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
@@ -696,6 +782,10 @@ class DroneSimulator {
             labelText = `${droneName}\n${drone.stopReason}`;
             textColor = "red";
             backgroundColor = "rgba(139, 0, 0, 0.5)";
+        } else if (this.followedDroneName === droneName) {
+            labelText = droneName;
+            textColor = "white";
+            backgroundColor = "rgba(0, 0, 0, 0.5)";
         } else {
             labelText = droneName;
             textColor = "yellow";
@@ -708,6 +798,9 @@ class DroneSimulator {
     public despawn(droneName: string): void {
         const drone = this.drones.get(droneName);
         if (drone) {
+            if (this.followedDroneName === droneName) {
+                this.clearFollowedDrone();
+            }
             drone.label.dispose();
             drone.mesh.dispose();
             this.drones.delete(droneName);
@@ -769,13 +862,11 @@ class DroneSimulator {
         ]);
         const droneSystem = new DynamicSystem('drone', droneDynamics, droneOutput, false, initialStateArray);
 
-        // PID gains to imitate AirSim simpleflight
         const Kp = [1, 4, 1];
         const Ki = [0, 0, 0];
         const Kd = [1.5 / 0.206, 0.1, 1.5 / 0.206];
         const T = 0.005;
 
-        // Internal PID controller matrices
         const A_pid = [
             [0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0],
@@ -931,6 +1022,8 @@ class DroneSimulator {
                 }
             }
 
+            this.updateCameraFollowing(dt);
+
             // Update drone label positions and orientations
             this.drones.forEach((drone) => {
                 const labelMesh = drone.label;
@@ -979,6 +1072,30 @@ class DroneSimulator {
         });
 
         console.log("Render loop started");
+    }
+
+    /**
+     * Updates camera position to follow the selected drone
+     */
+    private updateCameraFollowing(dt: number): void {
+        if (!this.followedDroneName || !this.drones.has(this.followedDroneName)) {
+            return;
+        }
+
+        const followedDrone = this.drones.get(this.followedDroneName)!;
+        let droneVelocity = followedDrone.state.velocity;
+        
+        if (followedDrone.isStopped) {
+            droneVelocity = new BABYLON.Vector3(0, 0, 0);
+        }
+
+        const cameraVelocity = new BABYLON.Vector3(droneVelocity.x, 0, droneVelocity.z);
+        
+        this.cameraBasePosition.addInPlace(cameraVelocity.scale(dt));
+        this.cameraBaseTarget.addInPlace(cameraVelocity.scale(dt));
+        
+        this.camera.position = this.cameraBasePosition.clone();
+        this.camera.target = this.cameraBaseTarget.clone();
     }
 }
 

@@ -113,3 +113,4 @@ designs.sort((a, b) => a.PMOrd - b.PMOrd).forEach((design, i) => {
 
 simulator.setCameraPosition(-9.7, 3.54, -11.36);
 simulator.setCameraRotation(0.22, 6.27, 0);
+simulator.resume();

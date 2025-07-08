@@ -301,6 +301,65 @@ class DroneSimulator {
         }
     }
 
+    /**
+     * Setup custom camera controls that work with following mode
+     */
+    private setupCustomCameraControls(): void {
+        const scene = this.scene;
+        let isPointerDown = false;
+        let lastPointerX = 0;
+        let lastPointerY = 0;
+        let isTouchRotating = false;
+
+        scene.onPointerObservable.add((pointerInfo) => {
+            switch (pointerInfo.type) {
+                case BABYLON.PointerEventTypes.POINTERDOWN:
+                    // Check for right mouse button or touch event (button === undefined for touch)
+                    const isTouch = pointerInfo.event.button === undefined || pointerInfo.event.button === -1;
+                    if (pointerInfo.event.button === 2 || isTouch) {
+                        isPointerDown = true;
+                        isTouchRotating = isTouch;
+                        lastPointerX = pointerInfo.event.clientX;
+                        lastPointerY = pointerInfo.event.clientY;
+                    }
+                    break;
+
+                case BABYLON.PointerEventTypes.POINTERUP:
+                    if (pointerInfo.event.button === 2 || isTouchRotating) {
+                        isPointerDown = false;
+                        isTouchRotating = false;
+                    }
+                    break;
+
+                case BABYLON.PointerEventTypes.POINTERMOVE:
+                    if (isPointerDown) {
+                        const deltaX = pointerInfo.event.clientX - lastPointerX;
+                        const deltaY = pointerInfo.event.clientY - lastPointerY;
+                        
+                        const rotationSpeed = isTouchRotating ? 0.005 : 0.003;
+                        this.camera.rotation.y += deltaX * rotationSpeed;
+                        this.camera.rotation.x += deltaY * rotationSpeed;
+                        
+                        this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                        
+                        if (this.followedDroneName) {
+                            const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                            this.cameraBaseTarget = this.cameraBasePosition.add(direction);
+                        } else {
+                            const direction = this.camera.getDirection(BABYLON.Vector3.Forward());
+                            this.camera.target = this.camera.position.add(direction);
+                        }
+                        
+                        lastPointerX = pointerInfo.event.clientX;
+                        lastPointerY = pointerInfo.event.clientY;
+                    }
+                    break;
+            }
+        });
+
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
     private setupGamepadControl(): void {
         const scene = this.scene;
         const deadzone = 0.15;
@@ -510,6 +569,7 @@ class DroneSimulator {
                 this.setupCameraKeyboardControl();
         this.setupGamepadControl();
         this.setupMouseClickHandler();
+        this.setupCustomCameraControls();
         this.camera.inputs.addMouseWheel();
 
         (this.camera.inputs.attached as any).touch.singleFingerRotate = true;

@@ -66,12 +66,14 @@ class DroneSimulator {
     private cameraSpeed: number = 0.4;
     private trackScale: number = 200;
     private codeChanged: boolean = false;
+    
+    // Camera following mode
     private followedDroneName: string | null = null;
     private filteredDroneVelocity: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
-    private cameraBasePosition: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
-    private cameraBaseTarget: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
     private cameraRelativePosition: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
     private cameraRelativeTarget: BABYLON.Vector3 = new BABYLON.Vector3(0, 0, 0);
+    
+    // Input handling
     private keys: { [key: string]: boolean } = {};
     private lastDragDistance: number = 0;
 
@@ -280,7 +282,7 @@ class DroneSimulator {
     }
 
     /**
-     * Setup drone click handler for camera following mode
+     * Setup drone click handler for camera following
      */
     private setupMouseClickHandler(): void {
         this.canvas.addEventListener('click', (event) => {
@@ -815,6 +817,7 @@ class DroneSimulator {
         this.camera.inputs.removeByType("FreeCameraKeyboardMoveInput");
         this.camera.inputs.removeByType("FreeCameraMouseInput");
         this.camera.inputs.removeByType("FreeCameraGamepadInput");
+        this.camera.inputs.removeByType("FreeCameraTouchInput");
 
         const light = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(0, -1, 0), this.scene);
         light.position = new BABYLON.Vector3(20, 40, 20);
@@ -852,9 +855,6 @@ class DroneSimulator {
         this.setupMouseClickHandler();
         this.setupCustomCameraControls();
         this.setupMouseWheel();
-
-        (this.camera.inputs.attached as any).touch.singleFingerRotate = true;
-        (this.camera.inputs.attached as any).touch.touchAngularSensibility = 5000;
 
         console.log("Scene setup completed");
     }

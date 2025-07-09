@@ -529,7 +529,7 @@ class DroneSimulator {
                                 isPinching = true;
                                 
                                 // Pinch-to-zoom: forward/backward movement
-                                const zoomSensitivity = 0.01;
+                                const zoomSensitivity = 0.1;
                                 const zoomDelta = (currentDistance - touchStartDistance) * zoomSensitivity;
                                 const forward = this.camera.getDirection(BABYLON.Vector3.Forward());
                                 const moveVector = forward.scale(zoomDelta);

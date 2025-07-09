@@ -84,6 +84,8 @@ class DroneSimulator {
         this.engine = new BABYLON.Engine(this.canvas, true);
         this.scene = new BABYLON.Scene(this.engine);
         this.drones = new Map();
+        
+        
         this.setupScene();
         this.setupCodeEditor();
         this.setupGUI();
@@ -997,7 +999,9 @@ class DroneSimulator {
         this.codeChanged = false; // Reset flag after update
     }
 
+
     private setupCodeEditor(): void {
+
         monaco.editor.defineTheme('myTheme', {
             base: 'vs-dark',
             inherit: true,
@@ -1012,7 +1016,6 @@ class DroneSimulator {
             target: monaco.languages.typescript.ScriptTarget.ES2015,
             allowNonTsExtensions: true
         });
-
 
         this.editor = monaco.editor.create(this.editorContainer, {
             value: defaultCode,

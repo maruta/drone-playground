@@ -76,6 +76,7 @@ class DroneSimulator {
     // Input handling
     private keys: { [key: string]: boolean } = {};
     private lastDragDistance: number = 0;
+    private lastPinchTime: number = 0;
 
     constructor(canvas: HTMLCanvasElement, editorContainer: HTMLElement) {
         this.canvas = canvas;
@@ -291,6 +292,13 @@ class DroneSimulator {
             if (this.lastDragDistance > dragThreshold) {
                 // Reset drag distance and ignore this click
                 this.lastDragDistance = 0;
+                return;
+            }
+            
+            // Ignore clicks shortly after pinch gestures
+            const pinchCooldownMs = 300; // milliseconds
+            const currentTime = Date.now();
+            if (currentTime - this.lastPinchTime < pinchCooldownMs) {
                 return;
             }
             
@@ -527,6 +535,7 @@ class DroneSimulator {
                             
                             if (distanceChange > distanceThreshold) {
                                 isPinching = true;
+                                this.lastPinchTime = Date.now();
                                 
                                 // Pinch-to-zoom: forward/backward movement
                                 const zoomSensitivity = 0.1;

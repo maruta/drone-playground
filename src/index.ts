@@ -406,6 +406,7 @@ class DroneSimulator {
         let touchCenterX = 0;
         let touchCenterY = 0;
         let isPinching = false;
+        let lastPinchDistance = 0;
         let lastTouchCenterX = 0;
         let lastTouchCenterY = 0;
         const activeTouches = new Map<number, { x: number, y: number }>();
@@ -440,6 +441,7 @@ class DroneSimulator {
                             const dx = touches[1].x - touches[0].x;
                             const dy = touches[1].y - touches[0].y;
                             touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+                            lastPinchDistance = touchStartDistance;
                             isPinching = false;
                         }
                         } else {
@@ -530,29 +532,46 @@ class DroneSimulator {
                             const currentDistance = Math.sqrt(dx * dx + dy * dy);
                             
                             // Check if this is a pinch gesture (distance change is significant)
-                            const distanceThreshold = 20; // pixels
+                            const distanceThreshold = 10; // pixels - reduced for smoother detection
                             const distanceChange = Math.abs(currentDistance - touchStartDistance);
                             
                             if (distanceChange > distanceThreshold) {
                                 isPinching = true;
                                 this.lastPinchTime = Date.now();
+                            }
+                            
+                            if (isPinching) {
+                                // Pinch-to-zoom: forward/backward movement (smooth incremental)
+                                const zoomSensitivity = 0.05;
+                                const zoomDelta = (currentDistance - lastPinchDistance) * zoomSensitivity;
                                 
-                                // Pinch-to-zoom: forward/backward movement
-                                const zoomSensitivity = 0.1;
-                                const zoomDelta = (currentDistance - touchStartDistance) * zoomSensitivity;
-                                const forward = this.camera.getDirection(BABYLON.Vector3.Forward());
-                                const moveVector = forward.scale(zoomDelta);
-                                
-                                if (this.followedDroneName) {
-                                    this.cameraRelativePosition.addInPlace(moveVector);
-                                    this.cameraRelativeTarget.addInPlace(moveVector);
-                                } else {
-                                    this.camera.position.addInPlace(moveVector);
-                                    this.camera.target.addInPlace(moveVector);
+                                if (Math.abs(zoomDelta) > 0.1) { // Only move if delta is significant
+                                    let moveVector: BABYLON.Vector3;
+                                    
+                                    if (this.followedDroneName) {
+                                        // In follow mode: move towards/away from drone
+                                        const followedDrone = this.drones.get(this.followedDroneName);
+                                        if (followedDrone) {
+                                            const dronePosition = followedDrone.state.position;
+                                            const cameraPosition = this.camera.position;
+                                            const towardsDrone = dronePosition.subtract(cameraPosition).normalize();
+                                            moveVector = towardsDrone.scale(zoomDelta);
+                                            
+                                            this.cameraRelativePosition.addInPlace(moveVector);
+                                            this.cameraRelativeTarget.addInPlace(moveVector);
+                                        }
+                                    } else {
+                                        // Normal mode: move in camera forward direction
+                                        const forward = this.camera.getDirection(BABYLON.Vector3.Forward());
+                                        moveVector = forward.scale(zoomDelta);
+                                        
+                                        this.camera.position.addInPlace(moveVector);
+                                        this.camera.target.addInPlace(moveVector);
+                                    }
+                                    
+                                    lastPinchDistance = currentDistance;
                                 }
-                                
-                                touchStartDistance = currentDistance;
-                            } else if (!isPinching) {
+                            } else {
                                 // Two-finger drag: lateral movement (only if not pinching)
                                 const deltaX = touchCenterX - lastTouchCenterX;
                                 const deltaY = touchCenterY - lastTouchCenterY;

@@ -509,8 +509,9 @@ class DroneSimulator {
                             if (this.followedDroneName) {
                                 this.rotateAroundDrone(deltaX * rotationSpeed, deltaY * rotationSpeed);
                             } else {
-                                this.camera.rotation.y += deltaX * rotationSpeed;
-                                this.camera.rotation.x += deltaY * rotationSpeed;
+                                // Touch rotation: invert X and Y for intuitive movement
+                                this.camera.rotation.y -= deltaX * rotationSpeed;  // Invert X
+                                this.camera.rotation.x -= deltaY * rotationSpeed;  // Invert Y
                                 this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
                                 
                                 const direction = this.camera.getDirection(BABYLON.Vector3.Forward());

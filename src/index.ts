@@ -397,6 +397,7 @@ class DroneSimulator {
         let touchStartDistance = 0;
         let touchCenterX = 0;
         let touchCenterY = 0;
+        let isPinching = false;
         let lastTouchCenterX = 0;
         let lastTouchCenterY = 0;
         const activeTouches = new Map<number, { x: number, y: number }>();
@@ -427,10 +428,11 @@ class DroneSimulator {
                             lastTouchCenterX = touchCenterX;
                             lastTouchCenterY = touchCenterY;
                             
-                            // Calculate initial distance for pinch zoom (not implemented yet)
+                            // Calculate initial distance for pinch-to-zoom
                             const dx = touches[1].x - touches[0].x;
                             const dy = touches[1].y - touches[0].y;
                             touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+                            isPinching = false;
                         }
                         } else {
                             if (evt.button === 0) {
@@ -460,10 +462,12 @@ class DroneSimulator {
                             }
                             isTouchRotating = false;
                             isTouchMoving = false;
+                            isPinching = false;
                         } else if (activeTouches.size === 1 && isTouchMoving) {
                             // Switched from two touches to one
                             isTouchMoving = false;
                             isTouchRotating = true;
+                            isPinching = false;
                             const remainingTouch = Array.from(activeTouches.values())[0];
                             lastPointerX = remainingTouch.x;
                             lastPointerY = remainingTouch.y;
@@ -507,25 +511,55 @@ class DroneSimulator {
                             lastPointerY = evt.clientY;
                             totalDragDistance += Math.sqrt(deltaX * deltaX + deltaY * deltaY);
                         } else if (isTouchMoving && activeTouches.size === 2) {
-                            // Two touch movement
+                            // Two touch movement/pinch
                             const touches = Array.from(activeTouches.values());
                             touchCenterX = (touches[0].x + touches[1].x) / 2;
                             touchCenterY = (touches[0].y + touches[1].y) / 2;
                             
-                            const deltaX = touchCenterX - lastTouchCenterX;
-                            const deltaY = touchCenterY - lastTouchCenterY;
-                            const moveSpeed = 0.02;
+                            // Calculate current distance for pinch-to-zoom
+                            const dx = touches[1].x - touches[0].x;
+                            const dy = touches[1].y - touches[0].y;
+                            const currentDistance = Math.sqrt(dx * dx + dy * dy);
                             
-                            const right = this.getRightDirection();
-                            const moveVector = right.scale(-deltaX * moveSpeed)
-                                .add(BABYLON.Vector3.Up().scale(deltaY * moveSpeed));
+                            // Check if this is a pinch gesture (distance change is significant)
+                            const distanceThreshold = 20; // pixels
+                            const distanceChange = Math.abs(currentDistance - touchStartDistance);
                             
-                            if (this.followedDroneName) {
-                                this.cameraRelativePosition.addInPlace(moveVector);
-                                this.cameraRelativeTarget.addInPlace(moveVector);
-                            } else {
-                                this.camera.position.addInPlace(moveVector);
-                                this.camera.target.addInPlace(moveVector);
+                            if (distanceChange > distanceThreshold) {
+                                isPinching = true;
+                                
+                                // Pinch-to-zoom: forward/backward movement
+                                const zoomSensitivity = 0.01;
+                                const zoomDelta = (currentDistance - touchStartDistance) * zoomSensitivity;
+                                const forward = this.camera.getDirection(BABYLON.Vector3.Forward());
+                                const moveVector = forward.scale(zoomDelta);
+                                
+                                if (this.followedDroneName) {
+                                    this.cameraRelativePosition.addInPlace(moveVector);
+                                    this.cameraRelativeTarget.addInPlace(moveVector);
+                                } else {
+                                    this.camera.position.addInPlace(moveVector);
+                                    this.camera.target.addInPlace(moveVector);
+                                }
+                                
+                                touchStartDistance = currentDistance;
+                            } else if (!isPinching) {
+                                // Two-finger drag: lateral movement (only if not pinching)
+                                const deltaX = touchCenterX - lastTouchCenterX;
+                                const deltaY = touchCenterY - lastTouchCenterY;
+                                const moveSpeed = 0.02;
+                                
+                                const right = this.getRightDirection();
+                                const moveVector = right.scale(-deltaX * moveSpeed)
+                                    .add(BABYLON.Vector3.Up().scale(deltaY * moveSpeed));
+                                
+                                if (this.followedDroneName) {
+                                    this.cameraRelativePosition.addInPlace(moveVector);
+                                    this.cameraRelativeTarget.addInPlace(moveVector);
+                                } else {
+                                    this.camera.position.addInPlace(moveVector);
+                                    this.camera.target.addInPlace(moveVector);
+                                }
                             }
                             
                             lastTouchCenterX = touchCenterX;
